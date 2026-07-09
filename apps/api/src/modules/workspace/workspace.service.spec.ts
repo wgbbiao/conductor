@@ -75,7 +75,7 @@ describe("WorkspaceService", () => {
     ]);
   });
 
-  it("syncDefault：切回默认分支并快进拉取", () => {
+  it("syncDefault：重置到远端默认分支", () => {
     const fake = new FakeShellRunner();
     const svc = new WorkspaceService(fake);
 
@@ -84,12 +84,17 @@ describe("WorkspaceService", () => {
     expect(fake.calls).toEqual([
       {
         command: "git",
+        args: ["fetch", "origin", "main"],
+        cwd: `${config.workspaceRoot}/p1/repo`,
+      },
+      {
+        command: "git",
         args: ["checkout", "main"],
         cwd: `${config.workspaceRoot}/p1/repo`,
       },
       {
         command: "git",
-        args: ["pull", "--ff-only"],
+        args: ["reset", "--hard", "origin/main"],
         cwd: `${config.workspaceRoot}/p1/repo`,
       },
     ]);
