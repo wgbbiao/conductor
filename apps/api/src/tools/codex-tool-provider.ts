@@ -61,6 +61,14 @@ export class CodexProvider implements ToolProvider {
       wake = undefined;
     };
 
+    if (ctx.signal.aborted) {
+      yield nextEvent({
+        type: "failed",
+        error: { code: "CODEX_ABORTED", message: "Codex run was canceled before start", retryable: false },
+      });
+      return;
+    }
+
     yield nextEvent({ type: "started" });
 
     // Controller already confirmed current CLI syntax is `codex exec [PROMPT]`.

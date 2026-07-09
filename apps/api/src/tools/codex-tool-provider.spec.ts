@@ -110,4 +110,19 @@ describe("CodexProvider", () => {
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     expect(events.map((event) => event.type)).toEqual(["started"]);
   });
+
+  it("signal 已取消时不启动 codex", async () => {
+    const provider = new CodexProvider();
+    const controller = new AbortController();
+    controller.abort();
+
+    const events = await collect(provider, base, controller.signal);
+
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "failed",
+      error: { code: "CODEX_ABORTED", retryable: false },
+    });
+  });
 });
