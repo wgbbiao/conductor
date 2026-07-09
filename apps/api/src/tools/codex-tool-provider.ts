@@ -9,6 +9,9 @@ import type {
   ValidationResult,
 } from "@conductor/core";
 
+type EventWithoutRuntimeFields<T> = T extends unknown ? Omit<T, "runId" | "seq" | "ts"> : never;
+type ToolEventBody = EventWithoutRuntimeFields<ToolEvent>;
+
 @Injectable()
 export class CodexProvider implements ToolProvider {
   readonly id = "codex";
@@ -38,19 +41,19 @@ export class CodexProvider implements ToolProvider {
 
   async *execute(input: ToolInvocation, ctx: ToolExecutionContext): AsyncIterable<ToolEvent> {
     let seq = 0;
-    const nextEvent = <T extends Omit<ToolEvent, "runId" | "seq" | "ts">>(event: T): ToolEvent => ({
+    const nextEvent = (event: ToolEventBody): ToolEvent => ({
       ...event,
       runId: input.toolRunId,
       seq: seq++,
       ts: new Date().toISOString(),
-    });
+    } as ToolEvent);
     const queue: ToolEvent[] = [];
     let finished = false;
     let wake: (() => void) | undefined;
     let failure: ToolEvent | undefined;
     let exitCode = 0;
 
-    const push = (event: Omit<ToolEvent, "runId" | "seq" | "ts">): void => {
+    const push = (event: ToolEventBody): void => {
       queue.push(nextEvent(event));
       wake?.();
       wake = undefined;
