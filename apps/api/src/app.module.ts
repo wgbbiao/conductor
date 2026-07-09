@@ -27,7 +27,9 @@ import { ProjectsController } from "./modules/projects/projects.controller";
 import { ProjectsService } from "./modules/projects/projects.service";
 import { AuditsController } from "./modules/audits/audits.controller";
 import { AuditsService } from "./modules/audits/audits.service";
+import { GitService } from "./modules/workspace/git.service";
 import { WorkspaceModule } from "./modules/workspace/workspace.module";
+import { WorkspaceService } from "./modules/workspace/workspace.service";
 import { CodexProvider } from "./tools/codex-tool-provider";
 import { config } from "./config";
 
@@ -77,6 +79,9 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
     private readonly audit: AuditService,
     private readonly bus: EventBusService,
     private readonly toolRuns: ToolRunService,
+    private readonly workspace: WorkspaceService,
+    private readonly git: GitService,
+    private readonly artifacts: ArtifactsService,
   ) {
     registry.register(mock);
     registry.register(codex);
@@ -95,6 +100,9 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
       registry: this.registry,
       audit: this.audit,
       bus: this.bus,
+      workspace: this.workspace,
+      git: this.git,
+      artifacts: this.artifacts,
     });
   }
 

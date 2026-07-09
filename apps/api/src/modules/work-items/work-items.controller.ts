@@ -32,6 +32,9 @@ export class WorkItemsController {
 
   @Post("work-items/:id/runs")
   run(@Param("id") id: string, @Body() dto: StartRunDto) {
-    return this.runs.start(id, dto.prompt, dto.idempotencyKey);
+    const providerId = typeof (dto as StartRunDto & { providerId?: unknown }).providerId === "string"
+      ? (dto as StartRunDto & { providerId?: string }).providerId
+      : undefined;
+    return this.runs.start(id, dto.prompt, dto.idempotencyKey, providerId);
   }
 }

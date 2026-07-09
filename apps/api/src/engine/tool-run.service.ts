@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable, OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { canTransition, defaultWorkflowDefinition } from "@conductor/core";
+import { ShellRunner } from "../common/shell-runner";
 import { AuditService } from "../events/audit.service";
+import { GitService } from "../modules/workspace/git.service";
+import { WorkspaceService } from "../modules/workspace/workspace.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TOOL_RUNS_QUEUE, redisConnectionOpts } from "./queues";
 
@@ -12,6 +15,9 @@ export class ToolRunService implements OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly workspace: WorkspaceService,
+    private readonly git: GitService,
+    private readonly runner: ShellRunner,
   ) {
     // 每个 app 实例持有自己的 queue，随生命周期关闭（避免模块级连接泄漏）
     this.queue = new Queue(TOOL_RUNS_QUEUE, { connection: redisConnectionOpts() });
@@ -21,14 +27,21 @@ export class ToolRunService implements OnModuleDestroy {
    * 幂等启动：相同 (workItemId, idempotencyKey) 返回已有 ToolRun。
    * 事务内只写状态 + 事件（事实源），事务提交后再入队（落实 ADR-0002）。
    */
-  async start(workItemId: string, prompt: string, idempotencyKey: string, providerId = "mock") {
-    const toolRun = await this.prisma.$transaction(async (tx) => {
+  async start(workItemId: string, prompt: string, idempotencyKey: string, providerId?: string) {
+    const result = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.toolRun.findUnique({
         where: { workItemId_idempotencyKey: { workItemId, idempotencyKey } },
       });
-      if (existing) return existing; // 幂等命中
+      if (existing) return { toolRun: existing, project: null }; // 幂等命中
 
-      const workItem = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
+      const workItem = await tx.workItem.findUniqueOrThrow({
+        where: { id: workItemId },
+        include: {
+          project: {
+            select: { id: true, repoUrl: true, defaultBranch: true },
+          },
+        },
+      });
       if (workItem.status !== "running") {
         if (workItem.status === "ready" && canTransition(defaultWorkflowDefinition, "ready", "running")) {
           await tx.workItem.update({ where: { id: workItemId }, data: { status: "running" } });
@@ -41,20 +54,33 @@ export class ToolRunService implements OnModuleDestroy {
         }
       }
 
+      const resolvedProviderId = providerId ?? (workItem.project.repoUrl ? "codex" : "mock");
       const created = await tx.toolRun.create({
-        data: { workItemId, providerId, idempotencyKey, prompt, status: "queued" },
+        data: { workItemId, providerId: resolvedProviderId, idempotencyKey, prompt, status: "queued" },
       });
       await tx.workItem.update({ where: { id: workItemId }, data: { currentToolRunId: created.id } });
       await this.audit.record(tx, {
         actorType: "system", actorId: "engine", action: "tool_run.created",
-        subjectType: "ToolRun", subjectId: created.id, payload: { providerId },
+        subjectType: "ToolRun", subjectId: created.id, payload: { providerId: resolvedProviderId },
       });
-      return created;
+      return { toolRun: created, project: workItem.project };
     });
 
+    if (!result.project) return result.toolRun;
+
     // 事务提交后再入队
-    await this.queue.add("run", { toolRunId: toolRun.id });
-    return toolRun;
+    await this.workspace.ensureCloned(result.project);
+    const baseCommit = this.git.baseCommit(result.project.id, result.project.defaultBranch);
+    const branch = `conductor/${workItemId}`;
+    this.runner.run("git", ["checkout", "-b", branch, baseCommit], {
+      cwd: this.workspace.repoPath(result.project.id),
+    });
+    await this.prisma.toolRun.update({
+      where: { id: result.toolRun.id },
+      data: { branch, baseCommit },
+    });
+    await this.queue.add("run", { toolRunId: result.toolRun.id });
+    return result.toolRun;
   }
 
   /** 启动时清理孤儿 running ToolRun（崩溃残留）→ 标 failed + 审计 */

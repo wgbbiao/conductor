@@ -4,6 +4,9 @@ import { Worker, type Job } from "bullmq";
 import type { WorkItemStatus } from "@conductor/core";
 import type { AuditService } from "../events/audit.service";
 import type { EventBusService } from "../events/event-bus.service";
+import type { ArtifactsService } from "../modules/artifacts/artifacts.service";
+import type { GitService } from "../modules/workspace/git.service";
+import type { WorkspaceService } from "../modules/workspace/workspace.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ToolRegistryService } from "../tools/tool-registry.service";
 import { TOOL_RUNS_QUEUE, redisConnectionOpts } from "./queues";
@@ -16,6 +19,9 @@ interface WorkerDeps {
   registry: ToolRegistryService;
   audit: AuditService;
   bus: EventBusService;
+  workspace: WorkspaceService;
+  git: GitService;
+  artifacts: ArtifactsService;
 }
 
 /**
@@ -23,14 +29,21 @@ interface WorkerDeps {
  * ToolEvent 落库（seq 唯一防重）→ 成功流转到 review（创建 pending Handoff）/ 失败流转到 failed。
  */
 export function startToolRunWorker(deps: WorkerDeps): Worker {
-  const { prisma, registry, audit, bus } = deps;
+  const { prisma, registry, audit, bus, workspace, git, artifacts } = deps;
 
   const worker = new Worker(
     TOOL_RUNS_QUEUE,
     async (job: Job) => {
       const { toolRunId } = job.data as { toolRunId: string };
-      const toolRun = await prisma.toolRun.findUniqueOrThrow({ where: { id: toolRunId } });
-      const provider = registry.get(toolRun.providerId);
+      const toolRun = await prisma.toolRun.findUniqueOrThrow({
+        where: { id: toolRunId },
+        include: { workItem: { include: { project: true } } },
+      });
+      const project = toolRun.workItem.project;
+      const workspacePath = workspace.repoPath(project.id);
+      const provider = registry.get(toolRun.providerId)
+        ?? registry.get(project.repoUrl ? "codex" : "mock")
+        ?? registry.get("mock");
       if (!provider) throw new Error(`provider ${toolRun.providerId} 未注册`);
 
       await prisma.toolRun.update({
@@ -47,7 +60,7 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
             workItemId: toolRun.workItemId,
             toolRunId,
             prompt: toolRun.prompt,
-            workspacePath: `/tmp/ws/${toolRunId}`,
+            workspacePath,
             idempotencyKey: toolRun.idempotencyKey,
           },
           { signal: ac.signal },
@@ -67,6 +80,12 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
           } catch (e) {
             logger.error(`bus emit 失败 runId=${toolRunId}`, e as Error);
           }
+        }
+
+        if (toolRun.baseCommit && toolRun.branch) {
+          const head = git.baseCommit(project.id, "HEAD");
+          const diff = git.diff(project.id, toolRun.baseCommit, head);
+          await artifacts.saveDiff(toolRunId, diff);
         }
 
         await prisma.toolRun.update({
