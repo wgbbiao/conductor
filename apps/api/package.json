@@ -7,7 +7,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "test": "vitest run",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts --forceExit",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -22,7 +22,6 @@
     "@prisma/client": "^5.18.0",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.12.0",
-    "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
