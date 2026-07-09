@@ -34,4 +34,10 @@ export class WorkspaceService {
     this.runner.run("git", ["checkout", "-b", branch], { cwd: this.repoPath(projectId) });
     return branch;
   }
+
+  syncDefault(projectId: string, defaultBranch: string): void {
+    const cwd = this.repoPath(projectId);
+    this.runner.run("git", ["checkout", defaultBranch], { cwd });
+    this.runner.run("git", ["pull", "--ff-only"], { cwd });
+  }
 }

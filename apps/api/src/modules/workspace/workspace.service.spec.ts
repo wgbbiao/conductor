@@ -74,4 +74,24 @@ describe("WorkspaceService", () => {
       },
     ]);
   });
+
+  it("syncDefault：切回默认分支并快进拉取", () => {
+    const fake = new FakeShellRunner();
+    const svc = new WorkspaceService(fake);
+
+    svc.syncDefault("p1", "main");
+
+    expect(fake.calls).toEqual([
+      {
+        command: "git",
+        args: ["checkout", "main"],
+        cwd: `${config.workspaceRoot}/p1/repo`,
+      },
+      {
+        command: "git",
+        args: ["pull", "--ff-only"],
+        cwd: `${config.workspaceRoot}/p1/repo`,
+      },
+    ]);
+  });
 });

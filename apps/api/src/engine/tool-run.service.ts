@@ -69,18 +69,42 @@ export class ToolRunService implements OnModuleDestroy {
     if (!result.project) return result.toolRun;
 
     // 事务提交后再入队
-    await this.workspace.ensureCloned(result.project);
-    const baseCommit = this.git.baseCommit(result.project.id, result.project.defaultBranch);
-    const branch = `conductor/${workItemId}`;
-    this.runner.run("git", ["checkout", "-b", branch, baseCommit], {
-      cwd: this.workspace.repoPath(result.project.id),
-    });
-    await this.prisma.toolRun.update({
-      where: { id: result.toolRun.id },
-      data: { branch, baseCommit },
-    });
-    await this.queue.add("run", { toolRunId: result.toolRun.id });
+    try {
+      await this.workspace.ensureCloned(result.project);
+      this.workspace.syncDefault(result.project.id, result.project.defaultBranch);
+      const baseCommit = this.git.baseCommit(result.project.id, result.project.defaultBranch);
+      const branch = `conductor/${workItemId}`;
+      this.runner.run("git", ["checkout", "-b", branch, baseCommit], {
+        cwd: this.workspace.repoPath(result.project.id),
+      });
+      await this.prisma.toolRun.update({
+        where: { id: result.toolRun.id },
+        data: { branch, baseCommit },
+      });
+      await this.queue.add("run", { toolRunId: result.toolRun.id });
+    } catch (error) {
+      await this.markStartFailed(result.toolRun.id, workItemId, error);
+      throw error;
+    }
     return result.toolRun;
+  }
+
+  private async markStartFailed(toolRunId: string, workItemId: string, error: unknown): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.toolRun.update({
+        where: { id: toolRunId },
+        data: { status: "failed", finishedAt: new Date() },
+      });
+      await tx.workItem.update({ where: { id: workItemId }, data: { status: "failed" } });
+      await this.audit.record(tx, {
+        actorType: "system",
+        actorId: "engine",
+        action: "tool_run.start_failed",
+        subjectType: "ToolRun",
+        subjectId: toolRunId,
+        payload: { workItemId, message: error instanceof Error ? error.message : String(error) },
+      });
+    });
   }
 
   /** 启动时清理孤儿 running ToolRun（崩溃残留）→ 标 failed + 审计 */
