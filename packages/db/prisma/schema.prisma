@@ -1,0 +1,186 @@
+// Conductor Prisma schema —— PostgreSQL 为唯一事实源（ADR-0002）
+// 合并 Phase 1 全量表 + Phase 1.5 User model（同一 init 迁移）
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== Phase 1.5：身份认证 =====
+
+enum UserRole {
+  admin
+  member
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String // bcrypt，绝不存明文
+  displayName  String
+  role         UserRole @default(admin) // P1.5 单用户阶段默认 admin
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+}
+
+// ===== Phase 1：核心业务对象 =====
+
+model Project {
+  id          String     @id @default(cuid())
+  name        String
+  description String     @default("")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workItems   WorkItem[]
+}
+
+enum WorkItemStatus {
+  draft
+  ready
+  running
+  review
+  done
+  failed
+}
+
+enum WorkItemType {
+  bug
+  feature
+  task
+}
+
+model WorkItem {
+  id               String         @id @default(cuid())
+  projectId        String
+  type             WorkItemType   @default(task)
+  title            String
+  description      String         @default("")
+  status           WorkItemStatus @default(draft)
+  currentToolRunId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  project      Project        @relation(fields: [projectId], references: [id])
+  toolRuns     ToolRun[]
+  workflowRuns WorkflowRun[]
+  handoffs     Handoff[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([type])
+}
+
+model WorkflowDefinition {
+  id         String         @id @default(cuid())
+  name       String
+  // transitions 以 JSON 存储（Phase 1 简化）
+  definition Json
+  createdAt  DateTime       @default(now())
+  runs       WorkflowRun[]
+}
+
+model WorkflowRun {
+  id                   String   @id @default(cuid())
+  workItemId           String
+  workflowDefinitionId String
+  currentStatus        WorkItemStatus
+  createdAt            DateTime @default(now())
+
+  workItem   WorkItem           @relation(fields: [workItemId], references: [id])
+  definition WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+
+  @@index([workItemId])
+}
+
+enum ToolRunStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+}
+
+model ToolRun {
+  id             String        @id @default(cuid())
+  workItemId     String
+  providerId     String
+  status         ToolRunStatus @default(queued)
+  idempotencyKey String
+  prompt         String
+  exitCode       Int?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  workItem WorkItem   @relation(fields: [workItemId], references: [id])
+  events   ToolEvent[]
+
+  @@unique([workItemId, idempotencyKey]) // 幂等：同 workItem 同 key 唯一
+  @@index([workItemId])
+  @@index([status])
+}
+
+model ToolEvent {
+  id      String   @id @default(cuid())
+  runId   String
+  seq     Int
+  type    String // started|output|artifact|completed|failed
+  payload Json // 完整事件体
+  ts      DateTime @default(now())
+
+  run ToolRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq]) // seq 单调，防重
+  @@index([runId])
+}
+
+model Artifact {
+  id          String   @id @default(cuid())
+  toolRunRef  String
+  path        String
+  contentHash String?
+  createdAt   DateTime @default(now())
+
+  @@index([toolRunRef])
+}
+
+enum HandoffStatus {
+  pending
+  approved
+  rejected
+}
+
+model Handoff {
+  id         String        @id @default(cuid())
+  workItemId String
+  fromStatus WorkItemStatus
+  toStatus   WorkItemStatus
+  status     HandoffStatus @default(pending)
+  decidedBy  String?
+  decidedAt  DateTime?
+  createdAt  DateTime      @default(now())
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id])
+
+  @@index([workItemId])
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorType   String // user | system | tool
+  actorId     String
+  action      String
+  subjectType String
+  subjectId   String
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([createdAt])
+}
