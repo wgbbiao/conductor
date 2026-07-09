@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import type { ShellRunner } from "../../common/shell-runner";
+import { ShellRunner } from "../../common/shell-runner";
 import { WorkspaceService } from "./workspace.service";
 
 @Injectable()
 export class PrService {
   constructor(
-    private readonly runner: Pick<ShellRunner, "run">,
+    private readonly runner: ShellRunner,
     private readonly workspace: WorkspaceService,
   ) {}
 
