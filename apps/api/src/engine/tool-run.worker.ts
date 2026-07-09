@@ -6,7 +6,7 @@ import type { AuditService } from "../events/audit.service";
 import type { EventBusService } from "../events/event-bus.service";
 import type { PrismaService } from "../prisma/prisma.service";
 import type { ToolRegistryService } from "../tools/tool-registry.service";
-import { connection } from "./queues";
+import { TOOL_RUNS_QUEUE, redisConnectionOpts } from "./queues";
 
 const logger = new Logger("ToolRunWorker");
 const RUN_TIMEOUT_MS = 60_000;
@@ -26,7 +26,7 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
   const { prisma, registry, audit, bus } = deps;
 
   const worker = new Worker(
-    "tool-runs",
+    TOOL_RUNS_QUEUE,
     async (job: Job) => {
       const { toolRunId } = job.data as { toolRunId: string };
       const toolRun = await prisma.toolRun.findUniqueOrThrow({ where: { id: toolRunId } });
@@ -86,7 +86,7 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
         clearTimeout(timer);
       }
     },
-    { connection },
+    { connection: redisConnectionOpts() },
   );
 
   worker.on("failed", (job, err) => logger.error(`job ${job?.id ?? "?"} 失败: ${err.message}`));

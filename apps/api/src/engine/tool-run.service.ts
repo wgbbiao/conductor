@@ -1,19 +1,25 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, OnModuleDestroy } from "@nestjs/common";
+import { Queue } from "bullmq";
 import { canTransition, defaultWorkflowDefinition } from "@conductor/core";
 import { AuditService } from "../events/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { toolRunsQueue } from "./queues";
+import { TOOL_RUNS_QUEUE, redisConnectionOpts } from "./queues";
 
 @Injectable()
-export class ToolRunService {
+export class ToolRunService implements OnModuleDestroy {
+  private readonly queue: Queue;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-  ) {}
+  ) {
+    // 每个 app 实例持有自己的 queue，随生命周期关闭（避免模块级连接泄漏）
+    this.queue = new Queue(TOOL_RUNS_QUEUE, { connection: redisConnectionOpts() });
+  }
 
   /**
    * 幂等启动：相同 (workItemId, idempotencyKey) 返回已有 ToolRun。
-   * 事务内只写状态 + 事件（事实源），事务提交后再入队（落实 ADR-0002：状态先落库再驱动执行）。
+   * 事务内只写状态 + 事件（事实源），事务提交后再入队（落实 ADR-0002）。
    */
   async start(workItemId: string, prompt: string, idempotencyKey: string, providerId = "mock") {
     const toolRun = await this.prisma.$transaction(async (tx) => {
@@ -23,7 +29,6 @@ export class ToolRunService {
       if (existing) return existing; // 幂等命中
 
       const workItem = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
-      // 若 WorkItem 非 running，尝试 ready -> running；否则拒绝
       if (workItem.status !== "running") {
         if (workItem.status === "ready" && canTransition(defaultWorkflowDefinition, "ready", "running")) {
           await tx.workItem.update({ where: { id: workItemId }, data: { status: "running" } });
@@ -47,8 +52,8 @@ export class ToolRunService {
       return created;
     });
 
-    // 事务提交后再入队，保证 worker 消费时行已可见
-    await toolRunsQueue.add("run", { toolRunId: toolRun.id });
+    // 事务提交后再入队
+    await this.queue.add("run", { toolRunId: toolRun.id });
     return toolRun;
   }
 
@@ -68,5 +73,9 @@ export class ToolRunService {
       });
     }
     return orphans.length;
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.queue.close();
   }
 }

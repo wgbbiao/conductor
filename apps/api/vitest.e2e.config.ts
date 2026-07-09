@@ -19,6 +19,7 @@ export default defineConfig({
     environment: "node",
     include: ["test/**/*.e2e-spec.ts"],
     testTimeout: 30000,
+    hookTimeout: 30000,
     // loadEnvFile 只改主进程 process.env；test 由 vitest 注入 worker，确保 env 可达
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? "",

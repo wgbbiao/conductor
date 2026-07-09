@@ -10,16 +10,27 @@ import { UsersController } from "./users/users.controller";
 import { UsersService } from "./users/users.service";
 import { AuditService } from "./events/audit.service";
 import { EventBusService } from "./events/event-bus.service";
+import { EventsGateway } from "./events/events.gateway";
 import { MockToolProvider } from "./tools/mock-tool-provider";
 import { ToolRegistryService } from "./tools/tool-registry.service";
 import { ToolRunService } from "./engine/tool-run.service";
 import { startToolRunWorker } from "./engine/tool-run.worker";
 import { HandoffsController } from "./modules/handoffs/handoffs.controller";
 import { HandoffsService } from "./modules/handoffs/handoffs.service";
+import { WorkItemsController } from "./modules/work-items/work-items.controller";
+import { WorkItemsService } from "./modules/work-items/work-items.service";
+import { ToolRunsController } from "./modules/tool-runs/tool-runs.controller";
+import { ToolRunsService } from "./modules/tool-runs/tool-runs.service";
 import { config } from "./config";
 
 @Module({
-  controllers: [AuthController, UsersController, HandoffsController],
+  controllers: [
+    AuthController,
+    UsersController,
+    HandoffsController,
+    WorkItemsController,
+    ToolRunsController,
+  ],
   providers: [
     PrismaService,
     JwtService,
@@ -27,10 +38,13 @@ import { config } from "./config";
     UsersService,
     AuditService,
     EventBusService,
+    EventsGateway,
     MockToolProvider,
     ToolRegistryService,
     ToolRunService,
     HandoffsService,
+    WorkItemsService,
+    ToolRunsService,
     // 全局守卫：所有 REST 默认需 JWT 鉴权，登录接口用 @Public 豁免
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
@@ -47,7 +61,6 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
     private readonly bus: EventBusService,
     private readonly toolRuns: ToolRunService,
   ) {
-    // Phase 1 仅注册 mock provider
     registry.register(mock);
   }
 
@@ -56,11 +69,9 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
     if (!config.databaseUrl) throw new Error("DATABASE_URL 未配置，拒绝启动");
     this.logger.log("启动配置校验通过（JWT_SECRET / DATABASE_URL 已就绪）");
 
-    // 清理孤儿 running ToolRun（崩溃残留）
     const recovered = await this.toolRuns.cleanupOrphanRuns();
     if (recovered > 0) this.logger.log(`清理 ${recovered} 个孤儿 running ToolRun`);
 
-    // 启动 BullMQ worker 消费 tool-runs 队列
     this.worker = startToolRunWorker({
       prisma: this.prisma,
       registry: this.registry,
@@ -71,5 +82,6 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await this.worker?.close();
+    // ToolRunService.OnModuleDestroy 关闭其 queue 连接（已注册，NestJS 自动调用）
   }
 }
