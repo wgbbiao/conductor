@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { Project } from "@prisma/client";
 import { ShellRunner } from "../../common/shell-runner";
 import { config } from "../../config";
@@ -11,10 +11,14 @@ type FsLike = {
 
 @Injectable()
 export class WorkspaceService {
+  private readonly fs: FsLike;
+
   constructor(
-    private readonly runner: Pick<ShellRunner, "run">,
-    private readonly fs: FsLike = { existsSync, mkdirSync },
-  ) {}
+    private readonly runner: ShellRunner,
+    @Optional() fs?: FsLike,
+  ) {
+    this.fs = fs ?? { existsSync, mkdirSync };
+  }
 
   repoPath(projectId: string): string {
     return `${config.workspaceRoot}/${projectId}/repo`;
