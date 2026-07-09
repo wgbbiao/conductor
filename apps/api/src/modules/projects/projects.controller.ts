@@ -8,7 +8,7 @@ export class ProjectsController {
 
   @Post("projects")
   create(@Body() dto: CreateProjectDto) {
-    return this.projects.create(dto.name, dto.description);
+    return this.projects.create(dto.name, dto.repoUrl, dto.description, dto.defaultBranch);
   }
 
   @Get("projects")

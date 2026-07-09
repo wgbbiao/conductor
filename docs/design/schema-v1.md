@@ -31,7 +31,7 @@
 | 5 | `WorkflowRun` | 编排 | P1 | 流程执行实例 |
 | 6 | `ToolRun` | 编排 | P1 | 一次 AI 工具调用（幂等） |
 | 7 | `ToolEvent` | 编排 | P1 | ToolRun 的流式事件账本 |
-| 8 | `Artifact` | 编排 | P1 | 工具产出物（占位） |
+| 8 | `Artifact` | 编排 | P1 | 工具产出物（diff/content） |
 | 9 | `Handoff` | 编排 | P1 | 人机交接/审批 |
 | 10 | `AuditEvent` | 平台基础 | P1 | 系统级事实账本 |
 
@@ -88,11 +88,15 @@ ToolRun 1──N Artifact    (逻辑关联，toolRunRef 字符串)
 |------|------|------|------|
 | `id` | String | `@id @default(cuid())` | 主键 |
 | `name` | String | — | 项目名 |
+| `repoUrl` | String | — | 项目仓库 URL |
+| `defaultBranch` | String | `@default("main")` | 默认分支 |
 | `description` | String | `@default("")` | 描述 |
 | `createdAt` | DateTime | `@default(now())` | — |
 | `updatedAt` | DateTime | `@updatedAt` | — |
 
 **关系**：`1──N WorkItem`
+
+**索引**：`@@index([repoUrl])`
 
 > P1 无 Organization/Tenant（P4）。Project 是顶层容器。
 
@@ -181,6 +185,8 @@ failed → ready（重试）
 | `startedAt` | DateTime? | — | 开始时间 |
 | `finishedAt` | DateTime? | — | 结束时间 |
 | `createdAt` | DateTime | `@default(now())` | — |
+| `branch` | String? | — | 运行时分支 |
+| `baseCommit` | String? | — | 运行基线 commit |
 
 **关系**：`workItem` (N──1)、`events` (1──N ToolEvent)
 
@@ -211,19 +217,20 @@ failed → ready（重试）
 
 ---
 
-### 4.8 `Artifact`（P1，占位）
+### 4.8 `Artifact`（P1）
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | `id` | String | `@id @default(cuid())` | 主键 |
 | `toolRunRef` | String | — | 关联 ToolRun（字符串引用，非 FK） |
-| `path` | String | — | 产物路径 |
+| `type` | String | `@default("diff")` | 产物类型（P1.5+ 先启用 diff） |
+| `content` | String | — | 产物内容 |
 | `contentHash` | String? | — | 内容哈希（去重/校验） |
 | `createdAt` | DateTime | `@default(now())` | — |
 
 **索引**：`@@index([toolRunRef])`
 
-> P1 schema 建表但**读写逻辑未实现**（P2 接真实 AI 工具时做）。表先建以避免后续迁移。
+> P1.5+ 起启用 diff 读写，`toolRunRef` 仍保持字符串引用，避免把历史产物生命周期绑定到 ToolRun FK。
 
 ---
 
@@ -336,12 +343,16 @@ model User {
 // ============ 2. Project (P1) ============
 
 model Project {
-  id          String    @id @default(cuid())
-  name        String
-  description String    @default("")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  workItems   WorkItem[]
+  id            String    @id @default(cuid())
+  name          String
+  repoUrl       String
+  defaultBranch String    @default("main")
+  description   String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  workItems     WorkItem[]
+
+  @@index([repoUrl])
 }
 
 // ============ 3. WorkItem (P1) ============
@@ -405,6 +416,8 @@ model ToolRun {
   startedAt      DateTime?
   finishedAt     DateTime?
   createdAt      DateTime      @default(now())
+  branch         String?
+  baseCommit     String?
 
   workItem WorkItem    @relation(fields: [workItemId], references: [id])
   events   ToolEvent[]
@@ -430,12 +443,13 @@ model ToolEvent {
   @@index([runId])
 }
 
-// ============ 8. Artifact (P1, 占位) ============
+// ============ 8. Artifact (P1) ============
 
 model Artifact {
   id          String   @id @default(cuid())
   toolRunRef  String
-  path        String
+  type        String   @default("diff")
+  content     String
   contentHash String?
   createdAt   DateTime @default(now())
 
@@ -483,7 +497,7 @@ model AuditEvent {
 | 项 | 当前 | 何时扩展 |
 |----|------|---------|
 | `WorkflowRun : WorkItem` | 1:1 | R3 可重放执行时改 1:N（[replay.md](./replay.md)） |
-| `Artifact` | 表占位，无读写 | P2 接真实 AI 工具 |
+| `Artifact` | P1.5+ 启用 diff 读写 | 需要扩到多类型产物或外部存储时 |
 | Organization/Tenant | 无（Project 为顶层） | P4 多租户 |
 | `UserRole` | 仅 admin/member | P4 完整 RBAC |
 | 软删除 | 无 | 合规需求出现时评估 |
@@ -496,4 +510,5 @@ model AuditEvent {
 
 | 日期 | 变更 |
 |------|------|
+| 2026-07-09 | 修订 Frozen：Project + `repoUrl`/`defaultBranch`、ToolRun + `branch`/`baseCommit`、Artifact 启用 `type`/`content`（见 `real-repo-codex-flow.md`）。 |
 | 2026-07-09 | v1 初版（Frozen）。整合 P1 + P1.5 全部 10 张表，统一字段/索引/约束/关系。定死为实施契约。来源：ADR-0002/0003/0004 + P1/P1.5 计划。 |

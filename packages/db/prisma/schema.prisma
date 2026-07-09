@@ -32,12 +32,16 @@ model User {
 // ===== Phase 1：核心业务对象 =====
 
 model Project {
-  id          String     @id @default(cuid())
-  name        String
-  description String     @default("")
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  workItems   WorkItem[]
+  id            String     @id @default(cuid())
+  name          String
+  repoUrl       String
+  defaultBranch String     @default("main")
+  description   String     @default("")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  workItems     WorkItem[]
+
+  @@index([repoUrl])
 }
 
 enum WorkItemStatus {
@@ -117,6 +121,8 @@ model ToolRun {
   startedAt      DateTime?
   finishedAt     DateTime?
   createdAt      DateTime      @default(now())
+  branch         String?
+  baseCommit     String?
 
   workItem WorkItem   @relation(fields: [workItemId], references: [id])
   events   ToolEvent[]
@@ -143,7 +149,8 @@ model ToolEvent {
 model Artifact {
   id          String   @id @default(cuid())
   toolRunRef  String
-  path        String
+  type        String   @default("diff")
+  content     String
   contentHash String?
   createdAt   DateTime @default(now())
 
