@@ -1,0 +1,15 @@
+{
+  "name": "@conductor/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": { "nanoid": "^5.0.7" },
+  "devDependencies": { "typescript": "^5.5.4", "vitest": "^2.0.5" }
+}
