@@ -2,14 +2,24 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { canTransition, defaultWorkflowDefinition, type WorkItemStatus } from "@conductor/core";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../../events/audit.service";
+import { GitService } from "../workspace/git.service";
+import { PrService } from "../workspace/pr.service";
 
 type Decision = "approved" | "rejected";
+type PendingPr = {
+  projectId: string;
+  workItemId: string;
+  branch: string;
+  title: string;
+};
 
 @Injectable()
 export class HandoffsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly git: GitService,
+    private readonly pr: PrService,
   ) {}
 
   /** 取某 WorkItem 当前 pending 的 Handoff（review 等待审批时存在） */
@@ -41,7 +51,7 @@ export class HandoffsService {
    * toStatus 语义=审批后目标态（v1.3）；reject 固定流转到 running。
    */
   private async decide(handoffId: string, decision: Decision, decidedBy: string, reason?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const handoff = await tx.handoff.findUniqueOrThrow({ where: { id: handoffId } });
       if (handoff.status !== "pending") {
         throw new ConflictException(`Handoff 已决议为 ${handoff.status}`);
@@ -52,11 +62,16 @@ export class HandoffsService {
         throw new ConflictException(`非法转移 ${handoff.fromStatus} -> ${target}`);
       }
 
+      const workItem = await tx.workItem.findUniqueOrThrow({
+        where: { id: handoff.workItemId },
+        select: { projectId: true, title: true },
+      });
+
       await tx.handoff.update({
         where: { id: handoffId },
         data: { status: decision, decidedBy, decidedAt: new Date() },
       });
-      await tx.workItem.update({
+      const updatedWorkItem = await tx.workItem.update({
         where: { id: handoff.workItemId },
         data: { status: target },
       });
@@ -68,7 +83,48 @@ export class HandoffsService {
         subjectId: handoff.workItemId,
         payload: { handoffId, to: target, reason },
       });
-      return tx.workItem.findUniqueOrThrow({ where: { id: handoff.workItemId } });
+
+      let pendingPr: PendingPr | null = null;
+      if (decision === "approved") {
+        const toolRun = await tx.toolRun.findFirst({
+          where: { workItemId: handoff.workItemId },
+          orderBy: { createdAt: "desc" },
+          select: { branch: true },
+        });
+        if (toolRun?.branch) {
+          pendingPr = {
+            projectId: workItem.projectId,
+            workItemId: handoff.workItemId,
+            branch: toolRun.branch,
+            title: workItem.title,
+          };
+        }
+      }
+
+      return { workItem: updatedWorkItem, pendingPr };
     });
+
+    if (!result.pendingPr) {
+      return result.workItem;
+    }
+
+    this.git.push(result.pendingPr.projectId, result.pendingPr.branch);
+    const prUrl = this.pr.create(
+      result.pendingPr.projectId,
+      result.pendingPr.branch,
+      result.pendingPr.title,
+      `Conductor WorkItem ${result.pendingPr.workItemId}`,
+    );
+    await this.prisma.auditEvent.create({
+      data: {
+        actorType: "system",
+        actorId: "engine",
+        action: "pr.created",
+        subjectType: "WorkItem",
+        subjectId: result.pendingPr.workItemId,
+        payload: { prUrl },
+      },
+    });
+    return { ...result.workItem, prUrl };
   }
 }
