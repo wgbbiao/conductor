@@ -5,7 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(name: string, repoUrl = "git@github.com:wgbbiao/test-demo.git", description = "", defaultBranch = "main") {
+  create(name: string, repoUrl: string, description = "", defaultBranch = "main") {
     return this.prisma.project.create({ data: { name, repoUrl, defaultBranch, description } });
   }
 

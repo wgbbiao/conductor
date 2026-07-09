@@ -1,6 +1,6 @@
 export class CreateProjectDto {
   name!: string;
-  repoUrl?: string;
+  repoUrl!: string;
   defaultBranch?: string;
   description?: string;
 }
