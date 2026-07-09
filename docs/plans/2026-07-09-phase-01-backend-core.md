@@ -2168,6 +2168,8 @@ git commit -m "test(api): end-to-end bug→AI→human-approval closed loop"
 ## Task 11a: 【v1.1 新增】Demo 脚本 —— Phase 1 验收物
 
 > **为什么新增**：开源冷启动，外部贡献者 clone 后必须能在 30 秒内看到 whoa。初版计划没有任何"让人跑起来演示"的入口。本 Task 产出最小 Web UI + 一键脚本，是 Phase 1 的**验收物**（对应顶部 Demo 验收标准）。
+>
+> 【v1.2】**UI 实现照 [UI 设计文档](../design/ui-design.md) 的 §4 demo 三页**（列表页/运行 Tab/审批 Tab）+ §5 审计回放页 + §10 实现指引。组件选型、布局、交互态、状态色板均已定。
 
 **Files:**
 - Create: `apps/web/`（最小 Next.js + MUI 页面，**只够 demo，不追求完整**）
