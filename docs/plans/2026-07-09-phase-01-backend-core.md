@@ -8,8 +8,11 @@
 |------|------|------|------|
 | v1.0 | 2026-07-09 | 初版 11 任务 TDD 计划 | codex 复核后起草 |
 | **v1.1** | 2026-07-09 | **office-hours 评审修订**：①范围重切，对齐"开源冷启动 demo"目标（新增 Task 4a/8a/11a）；②修复技术硬伤（AuditService 签名、入队顺序、socket.io 统一）；③WorkItem 加 `type` 字段；④Handoff 实际驱动（REST + demo）；⑤明确执行批次与"开发工程师按 Task 批次审批"流程 | [评审报告](../../) · grill 共识 |
+| **v1.2** | 2026-07-09 | **前置依赖 P1.5**：grill 确认"先 P1.5 后 P1 demo"。本计划实施前需先完成 [Phase 1.5（auth/user/rbac）](./2026-07-09-phase-1.5-auth-user-rbac.md)，使 `Handoff.decidedBy`/`AuditEvent.actorId` 用真 userId、所有 REST 挂 JWT。P1.5 Task 9 负责本计划的对齐。本计划其它 Task 在 P1.5 完成后实施，actor/token 按 P1.5 约定。 | grill 共识 |
 
 **v1.1 修订原因**：初版计划产出的是"可审计事件账本引擎"，但项目目标是开源冷启动，第一版必须是**能 demo 多角色人机协同一段研发流程**的产物。两者错配，故重切范围——不是推翻，是把服务 demo 的部分前置，补 3 个 demo 必需任务，修 4 个会编译失败/违背 ADR 的硬伤。详见各 Task 的 `【v1.1】` 标注。
+
+> **【v1.2】实施顺序**：先做 [Phase 1.5](./2026-07-09-phase-1.5-auth-user-rbac.md)（auth/user），再做本计划的 Task 1-11a。本计划假设 P1.5 已完成——所有 REST 默认带 JWT 鉴权、actor 用真 userId、e2e 先登录拿 token。
 
 **Goal:** 打通 Conductor 核心闭环——创建 WorkItem(type=bug) → 触发 ToolRun → MockToolProvider 流式产出 ToolEvent → 事件落库（PG 事实源）→ 状态流转到 review → **人类 Reviewer 在 UI 审批** → 流转到 done → 全程可审计回放。
 

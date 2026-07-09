@@ -16,6 +16,20 @@
 
 ---
 
+## Phase 1.5 — 身份认证 · 用户 · 权限骨架 📋
+
+**目标**：引入多用户就绪的 User 表 + JWT 登录 + 最小权限骨架，作为 P1 demo 的前置地基。
+
+> **实施顺序**：经 grill 确认 **先 P1.5 后 P1 demo**——`Handoff.decidedBy`/`AuditEvent.actorId` 从一开始用真 userId，零返工。详见 [Phase 1.5 计划](./docs/plans/2026-07-09-phase-1.5-auth-user-rbac.md)。
+
+- [ ] User 表（多用户就绪建模，bcrypt passwordHash，role 枚举）
+- [ ] JWT 登录 + 全局鉴权守卫（P1 所有 REST 挂 token）
+- [ ] CLI seed 创建用户（不做注册界面）
+- [ ] 权限骨架（role 字段 + isAdmin，完整 RBAC 留 Phase 4）
+- [ ] 对齐 P1：actor 改真 userId、REST 挂鉴权
+
+---
+
 ## Phase 1 — 架构骨架 📋
 
 **目标**：搭起核心领域模型与扩展点，让"可插拔"成为一等公民。
