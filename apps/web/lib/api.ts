@@ -43,10 +43,13 @@ export const api = {
 
   // projects
   listProjects: () => apiFetch<Project[]>("/projects"),
-  createProject: (name: string) => apiFetch<Project>("/projects", { method: "POST", json: { name } }),
+  createProject: (name: string, repoUrl: string) =>
+    apiFetch<Project>("/projects", { method: "POST", json: { name, repoUrl } }),
 
   // work items
   listWorkItems: () => apiFetch<WorkItem[]>("/work-items"),
+  listWorkItemsByProject: (projectId: string) =>
+    apiFetch<WorkItem[]>(`/work-items?projectId=${encodeURIComponent(projectId)}`),
   createWorkItem: (projectId: string, data: { title: string; type: WorkItem["type"]; description?: string }) =>
     apiFetch<WorkItem>(`/projects/${projectId}/work-items`, { method: "POST", json: data }),
   getWorkItem: (id: string) => apiFetch<WorkItem>(`/work-items/${id}`),

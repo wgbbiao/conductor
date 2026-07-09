@@ -11,10 +11,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  List,
-  ListItemButton,
-  ListItemText,
-  MenuItem,
   Skeleton,
   Snackbar,
   Stack,
@@ -22,15 +18,13 @@ import {
   Typography,
 } from "@mui/material";
 import { TopAppBar } from "@/components/AppBar";
-import { WorkItemStatusChip, WorkItemTypeChip } from "@/components/StatusChip";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
-import type { Project, WorkItem, WorkItemType } from "@/lib/types";
+import type { Project } from "@/lib/types";
 
 export default function HomePage() {
   const router = useRouter();
-  const [items, setItems] = useState<WorkItem[] | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
+  const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -40,19 +34,10 @@ export default function HomePage() {
       router.replace("/login");
       return;
     }
-    (async () => {
-      try {
-        let projects = await api.listProjects();
-        if (projects.length === 0) projects = [await api.createProject("demo")];
-        setProject(projects[0] ?? null);
-        setItems(await api.listWorkItems());
-      } catch (e) {
-        setError(String(e));
-      }
-    })();
+    api.listProjects().then(setProjects).catch((e) => setError(String(e)));
   }, [router]);
 
-  const reload = async () => setItems(await api.listWorkItems());
+  const reload = async () => setProjects(await api.listProjects());
 
   if (error) {
     return (
@@ -67,60 +52,73 @@ export default function HomePage() {
 
   return (
     <>
-      <TopAppBar title="工作项" />
-      <Box sx={{ maxWidth: 900, mx: "auto", p: 3 }}>
+      <TopAppBar title="项目" />
+      <Box sx={{ maxWidth: 960, mx: "auto", p: 3 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Typography variant="h5">工作项</Typography>
-          <Button variant="contained" onClick={() => setOpen(true)} disabled={!project}>
-            + 新建
+          <Typography variant="h5">项目</Typography>
+          <Button variant="contained" onClick={() => setOpen(true)}>
+            新建项目
           </Button>
         </Stack>
 
-        {items === null ? (
+        {projects === null ? (
           <Stack spacing={1}>
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} variant="rounded" height={64} />
+            {[0, 1, 2].map((index) => (
+              <Skeleton key={index} variant="rounded" height={88} />
             ))}
           </Stack>
-        ) : items.length === 0 ? (
-          <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
-            <Typography>还没有工作项，点「+ 新建」报第一个 bug 试试 🐛</Typography>
+        ) : projects.length === 0 ? (
+          <Box sx={{ py: 8, textAlign: "center", color: "text.secondary" }}>
+            <Typography>暂无项目</Typography>
           </Box>
         ) : (
-          <List>
-            {items.map((wi) => (
-              <ListItemButton
-                key={wi.id}
-                onClick={() => router.push(`/work-items/${wi.id}`)}
-                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, mb: 1 }}
+          <Stack spacing={1.5}>
+            {projects.map((project) => (
+              <Box
+                key={project.id}
+                sx={{
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 2,
+                  px: 2,
+                  py: 1.75,
+                }}
               >
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: "100%" }}>
-                  <WorkItemTypeChip type={wi.type} />
-                  <ListItemText
-                    primary={wi.title}
-                    secondary={new Date(wi.updatedAt).toLocaleString("zh-CN")}
-                    sx={{ flex: 1 }}
-                  />
-                  <WorkItemStatusChip status={wi.status} />
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="subtitle1">{project.name}</Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontFamily: "monospace", wordBreak: "break-all" }}
+                    >
+                      {project.repoUrl}
+                    </Typography>
+                  </Box>
+                  <Stack spacing={1} alignItems="flex-end" sx={{ flexShrink: 0 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {project.defaultBranch}
+                    </Typography>
+                    <Button variant="outlined" onClick={() => router.push(`/projects/${project.id}`)}>
+                      进入
+                    </Button>
+                  </Stack>
                 </Stack>
-              </ListItemButton>
+              </Box>
             ))}
-          </List>
+          </Stack>
         )}
       </Box>
 
-      {project && (
-        <CreateDialog
-          open={open}
-          projectId={project.id}
-          onClose={() => setOpen(false)}
-          onCreated={async () => {
-            setOpen(false);
-            await reload();
-            setToast("已创建工作项");
-          }}
-        />
-      )}
+      <CreateProjectDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onCreated={async () => {
+          setOpen(false);
+          await reload();
+          setToast("已创建项目");
+        }}
+      />
 
       <Snackbar open={!!toast} autoHideDuration={2000} onClose={() => setToast("")}>
         <Alert severity="success">{toast}</Alert>
@@ -129,20 +127,17 @@ export default function HomePage() {
   );
 }
 
-function CreateDialog({
+function CreateProjectDialog({
   open,
-  projectId,
   onClose,
   onCreated,
 }: {
   open: boolean;
-  projectId: string;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: () => void | Promise<void>;
 }) {
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<WorkItemType>("bug");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -151,11 +146,10 @@ function CreateDialog({
     setLoading(true);
     setError("");
     try {
-      await api.createWorkItem(projectId, { title, type, description });
-      setTitle("");
-      setDescription("");
-      setType("bug");
-      onCreated();
+      await api.createProject(name.trim(), repoUrl.trim());
+      setName("");
+      setRepoUrl("");
+      await onCreated();
     } catch (err) {
       setError(String(err));
     } finally {
@@ -166,29 +160,17 @@ function CreateDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <form onSubmit={submit}>
-        <DialogTitle>新建工作项</DialogTitle>
+        <DialogTitle>新建项目</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="标题" value={title} onChange={(e) => setTitle(e.target.value)} required fullWidth />
-            <TextField select label="类型" value={type} onChange={(e) => setType(e.target.value as WorkItemType)} fullWidth>
-              <MenuItem value="bug">Bug</MenuItem>
-              <MenuItem value="feature">Feature</MenuItem>
-              <MenuItem value="task">Task</MenuItem>
-            </TextField>
-            <TextField
-              label="描述"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              multiline
-              rows={3}
-              fullWidth
-            />
+            <TextField label="项目名称" value={name} onChange={(e) => setName(e.target.value)} required fullWidth />
+            <TextField label="Git URL" value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} required fullWidth />
             {error && <Alert severity="error">{error}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>取消</Button>
-          <Button type="submit" variant="contained" disabled={loading || !title}>
+          <Button type="submit" variant="contained" disabled={loading || !name.trim() || !repoUrl.trim()}>
             {loading ? <CircularProgress size={20} /> : "创建"}
           </Button>
         </DialogActions>

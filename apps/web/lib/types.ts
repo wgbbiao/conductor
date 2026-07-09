@@ -7,6 +7,8 @@ export interface Project {
   id: string;
   name: string;
   description: string;
+  repoUrl: string;
+  defaultBranch: string;
   createdAt: string;
 }
 

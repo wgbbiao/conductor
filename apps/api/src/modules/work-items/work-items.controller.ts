@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ToolRunService } from "../../engine/tool-run.service";
 import { CreateWorkItemDto, StartRunDto } from "./dto";
 import { WorkItemsService } from "./work-items.service";
@@ -16,8 +16,8 @@ export class WorkItemsController {
   }
 
   @Get("work-items")
-  list() {
-    return this.items.list();
+  list(@Query("projectId") projectId?: string) {
+    return this.items.list(projectId);
   }
 
   @Get("work-items/:id")
