@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { defaultWorkflowDefinition, canTransition, findTransition, nextStatuses } from "./workflow-rules.js";
+import { defaultWorkflowDefinition, canTransition, findTransition, nextStatuses } from "./workflow-rules";
 
 describe("workflow rules", () => {
   const def = defaultWorkflowDefinition;

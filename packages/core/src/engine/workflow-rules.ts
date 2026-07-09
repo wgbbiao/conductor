@@ -1,5 +1,5 @@
-import type { WorkflowDefinition, WorkflowTransition } from "../domain/workflow.js";
-import type { WorkItemStatus } from "../domain/work-item.js";
+import type { WorkflowDefinition, WorkflowTransition } from "../domain/workflow";
+import type { WorkItemStatus } from "../domain/work-item";
 
 /**
  * 默认流程定义（Phase 1 内置）。

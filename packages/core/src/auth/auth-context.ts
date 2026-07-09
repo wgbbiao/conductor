@@ -1,4 +1,4 @@
-import type { UserRole } from "../domain/user.js";
+import type { UserRole } from "../domain/user";
 
 /** 鉴权后注入请求上下文；对齐 core/policy 的 PolicyContext.userId */
 export interface AuthContext {

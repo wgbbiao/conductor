@@ -1,4 +1,4 @@
-import type { ToolProvider } from "./tool-provider.js";
+import type { ToolProvider } from "./tool-provider";
 
 /** ToolRegistry —— 工具注册表接口，供 api 层实现 */
 export interface ToolRegistry {

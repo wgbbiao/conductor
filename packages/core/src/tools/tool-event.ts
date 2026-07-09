@@ -1,4 +1,4 @@
-import type { ToolError } from "../domain/tool-run.js";
+import type { ToolError } from "../domain/tool-run";
 
 /**
  * ToolEvent —— ToolRun 的流式事件账本（一等模型）。

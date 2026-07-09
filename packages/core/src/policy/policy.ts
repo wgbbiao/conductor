@@ -1,5 +1,5 @@
-import type { WorkItemStatus } from "../domain/work-item.js";
-import type { ToolInvocation } from "../tools/tool-provider.js";
+import type { WorkItemStatus } from "../domain/work-item";
+import type { ToolInvocation } from "../tools/tool-provider";
 
 /**
  * PolicyEngine —— 治理契约（第三个扩展点，但 Role 不与能力插件同类）。

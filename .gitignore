@@ -97,3 +97,7 @@ secrets/
 # === AI / agent artifacts ===
 .agent-cache/
 .conductor-cache/
+
+# turbo 本地缓存
+turbo/
+.turbo/

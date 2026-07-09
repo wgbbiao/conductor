@@ -1,5 +1,5 @@
-import type { ToolEvent } from "./tool-event.js";
-import type { ToolError } from "../domain/tool-run.js";
+import type { ToolEvent } from "./tool-event";
+import type { ToolError } from "../domain/tool-run";
 
 /**
  * ToolProvider —— Conductor 的核心能力扩展点之一（可插拔的 AI 工具适配器）。

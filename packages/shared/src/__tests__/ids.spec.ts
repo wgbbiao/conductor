@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newId } from "../ids.js";
+import { newId } from "../ids";
 
 describe("newId", () => {
   it("带前缀且全局唯一", () => {

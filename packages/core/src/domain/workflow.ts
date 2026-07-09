@@ -1,4 +1,4 @@
-import type { WorkItemStatus } from "./work-item.js";
+import type { WorkItemStatus } from "./work-item";
 
 /**
  * 流程定义与执行实例分离（见 phase-01-architecture §4）：
