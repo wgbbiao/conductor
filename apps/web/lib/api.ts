@@ -60,7 +60,7 @@ export const api = {
     apiFetch<ToolRun>(`/work-items/${id}/runs`, { method: "POST", json: { prompt, idempotencyKey } }),
   listRuns: (workItemId: string) => apiFetch<ToolRun[]>(`/work-items/${workItemId}/runs`),
   getEvents: (runId: string) => apiFetch<ToolEvent[]>(`/tool-runs/${runId}/events`),
-  getDiff: (runId: string) => apiFetch<{ diff: string }>(`/tool-runs/${runId}/diff`).then((r) => r.diff).catch(() => ""),
+  getDiff: (runId: string) => apiFetch<{ diff: string }>(`/tool-runs/${runId}/diff`).then((r) => r.diff),
 
   // handoffs
   getPendingHandoff: (workItemId: string) => apiFetch<Handoff>(`/work-items/${workItemId}/handoffs/pending`),

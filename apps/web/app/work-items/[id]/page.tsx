@@ -291,22 +291,28 @@ function ApprovalPanel({
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [diff, setDiff] = useState("");
+  const [diffError, setDiffError] = useState("");
   const [diffLoading, setDiffLoading] = useState(false);
   const [prUrl, setPrUrl] = useState("");
 
   useEffect(() => {
     if (wiStatus !== "review" || !latestRunId) {
       setDiff("");
+      setDiffError("");
       setDiffLoading(false);
       return;
     }
 
     let active = true;
     setDiffLoading(true);
+    setDiffError("");
     api
       .getDiff(latestRunId)
       .then((nextDiff) => {
         if (active) setDiff(nextDiff);
+      })
+      .catch((err: unknown) => {
+        if (active) setDiffError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (active) setDiffLoading(false);
@@ -380,6 +386,8 @@ function ApprovalPanel({
                 <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                   <CircularProgress size={20} />
                 </Box>
+              ) : diffError ? (
+                <Alert severity="error">{diffError}</Alert>
               ) : (
                 <DiffViewer diff={diff} />
               )}
