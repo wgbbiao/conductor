@@ -64,10 +64,10 @@ RoleDefinition · RoleAssignment · PolicyEngine · Handoff · AuditEvent · Use
 ```
 
 **关键关系**
-- `WorkItem` 是业务对象（一个需求/任务）。
+- `WorkItem` 是业务对象（一个需求/任务）。带 `type` 字段（bug/feature/task）——bug 等不作为独立实体，而是 WorkItem 的一种（见 ADR-0003，决策依据：避免为建模洁癖让 Phase 1 多扛一整套状态机）。
 - `WorkflowDefinition` 是流程定义（状态/转移规则）；`WorkflowRun` 是一次执行实例（支持重跑/回滚/分支）。
 - `ToolRun` 描述一次 AI 工具调用的完整生命周期；`ToolEvent` 是其流式事件账本（幂等 seq）。
-- `Handoff` 表达"谁必须确认才能继续"，不仅是交接记录。
+- `Handoff` 表达"谁必须确认才能继续"，不仅是交接记录。**Phase 1 由 REST（approve/reject）实际驱动**，是 demo"人机协同审批"的核心。
 - `AuditEvent` 是系统级事实账本，跨所有领域。
 
 ## 5. 三个扩展点契约（TypeScript 草案）

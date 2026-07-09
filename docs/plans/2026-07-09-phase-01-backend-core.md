@@ -2,11 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 打通 Conductor 核心闭环——创建 WorkItem → 触发 ToolRun → MockToolProvider 流式产出 ToolEvent → 事件落库（PG 事实源）→ 状态流转 → WebSocket 实时回显 → 全程可审计。
+## 修订记录
+
+| 版本 | 日期 | 变更 | 来源 |
+|------|------|------|------|
+| v1.0 | 2026-07-09 | 初版 11 任务 TDD 计划 | codex 复核后起草 |
+| **v1.1** | 2026-07-09 | **office-hours 评审修订**：①范围重切，对齐"开源冷启动 demo"目标（新增 Task 4a/8a/11a）；②修复技术硬伤（AuditService 签名、入队顺序、socket.io 统一）；③WorkItem 加 `type` 字段；④Handoff 实际驱动（REST + demo）；⑤明确执行批次与"开发工程师按 Task 批次审批"流程 | [评审报告](../../) · grill 共识 |
+
+**v1.1 修订原因**：初版计划产出的是"可审计事件账本引擎"，但项目目标是开源冷启动，第一版必须是**能 demo 多角色人机协同一段研发流程**的产物。两者错配，故重切范围——不是推翻，是把服务 demo 的部分前置，补 3 个 demo 必需任务，修 4 个会编译失败/违背 ADR 的硬伤。详见各 Task 的 `【v1.1】` 标注。
+
+**Goal:** 打通 Conductor 核心闭环——创建 WorkItem(type=bug) → 触发 ToolRun → MockToolProvider 流式产出 ToolEvent → 事件落库（PG 事实源）→ 状态流转到 review → **人类 Reviewer 在 UI 审批** → 流转到 done → 全程可审计回放。
 
 **Architecture:** 全 TypeScript Monorepo（Turborepo + pnpm）。`packages/core` 纯类型契约（无 IO）、`packages/db` Prisma、`packages/shared` 工具、`apps/api` NestJS（REST + WebSocket + 内嵌 Engine + BullMQ worker）。PostgreSQL 为唯一事实源，Redis/BullMQ/WS 仅做执行与投递。
 
-**Tech Stack:** Node.js 20 · pnpm 9 · TypeScript 5 (strict) · NestJS 10 · Prisma 5 · PostgreSQL 16 · Redis 7 · BullMQ · vitest · ws
+**Tech Stack:** Node.js 20 · pnpm 9 · TypeScript 5 (strict) · NestJS 10 · Prisma 5 · PostgreSQL 16 · Redis 7 · BullMQ · vitest · **socket.io**（见下方"实时栈统一"）
+
+> 【v1.1】**Demo 验收标准（Phase 1 完成的硬指标）**：一个外部贡献者 clone 下来，`docker compose up -d` + `pnpm install` + `pnpm dev`，打开 Web UI——**报一个 bug → 看到 AI(Mock) 自动产出修复 → 他以 Reviewer 身份点"批准" → bug 流转到 done，且他能在审计面板回放全过程**。这 30 秒就是第一版的 whoa，也是 README 该放的 GIF。**任何不为这个 demo 服务的部分，本 Phase 不做。**
 
 ---
 
@@ -22,6 +33,22 @@
 - 测试框架：**vitest**；命名 `*.spec.ts`（单元）/ `*.e2e-spec.ts`（端到端）
 - 每个任务结束 **commit**，遵循 Conventional Commits（`feat:` / `test:` / `chore:` / `refactor:`）
 - 代码注释与文档用中文，标识符用英文
+- 【v1.1】**实时栈统一为 socket.io**：ADR-0001 原写 "WebSocket（ws）"，实际依赖与代码用 socket.io（`@nestjs/platform-socket.io` + `socket.io-client`）。二者不是一回事。本计划统一用 socket.io；**ADR-0001 需同步修订**（见"文档同步"）。禁止混用裸 `ws`。
+- 【v1.1】**禁止 `as any` 绕过类型**（原 v1 的 `AuditService.record` 用了 `as any`，违背本条与"禁止 any"约束，已修正——见 Task 6）。
+- 【v1.1】**BullMQ 入队必须在 DB 事务提交之后**（原 v1 在 `$transaction` 内 `queue.add`，违背 ADR-0002"状态先落库再驱动执行"的字面顺序，可能 worker 提前消费查不到行——已修正，见 Task 8）。
+
+### 【v1.1】执行批次与审批流程（开发工程师授权）
+
+代码开发实行**按 Task 批次审批**：每批次打包为一个 PR，**开发工程师审过才继续下一批**。AI agent 在每批次开工前，先列出本批次文件清单 + 关键设计点，获批后才动手写代码。文档改动不在此约束内。
+
+| 批次 | Task | 审批重点 |
+|------|------|----------|
+| PR-1 | Task 1, 2 | 基建能否跑起来（`pnpm install` + docker 起 pg/redis） |
+| PR-2 | Task 3, 5 | 核心契约 + 状态机规则（纯类型，最该让开发工程师看） |
+| PR-3 | Task 4, 4a | schema + `type` 字段（数据模型，影响深远） |
+| PR-4 | Task 6, 7 | api 骨架 + Mock（含 AuditService 签名修正） |
+| PR-5 | Task 8, 8a, 9 | worker（入队顺序修正）+ Handoff REST + controllers |
+| PR-6 | Task 10, 11, 11a | WS + e2e + **demo 脚本（跑通即验收）** |
 
 ---
 
@@ -386,7 +413,11 @@ git commit -m "feat(shared): id generator and Result type"
 
 - [ ] **Step 2: 领域类型 `src/domain/work-item.ts`**
 
+> 【v1.1】新增 `WorkItemType`。grill 结论：bug 不作为独立实体（那是建模洁癖，会让 Phase 1 多扛一整套状态机），而是 WorkItem 的一种。`type` 字段为后续"不同类型走不同流程"留口——这本身就是编排平台的核心能力。
+
 ```ts
+export type WorkItemType = "bug" | "feature" | "task";
+
 export type WorkItemStatus =
   | "draft"
   | "ready"      // 就绪，可触发 ToolRun
@@ -398,6 +429,7 @@ export type WorkItemStatus =
 export interface WorkItem {
   id: string;            // wi_xxx
   projectId: string;
+  type: WorkItemType;    // 【v1.1】bug/feature/task
   title: string;
   description: string;
   status: WorkItemStatus;
@@ -710,9 +742,16 @@ enum WorkItemStatus {
   failed
 }
 
+enum WorkItemType {
+  bug
+  feature
+  task
+}
+
 model WorkItem {
   id               String         @id @default(cuid())
   projectId        String
+  type             WorkItemType   @default(task)   // 【v1.1】
   title            String
   description      String         @default("")
   status           WorkItemStatus @default(draft)
@@ -727,6 +766,7 @@ model WorkItem {
 
   @@index([projectId])
   @@index([status])
+  @@index([type])         // 【v1.1】按类型查询
 }
 
 model WorkflowDefinition {
@@ -1079,9 +1119,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
 - [ ] **Step 6: 创建 `src/events/audit.service.ts`（事实账本写入）**
 
+> 【v1.1】**修正签名**：v1 用 `PrismaService["prisma"] extends infer P ? P : never` 是错的类型表达式，且用 `as any` 绕过类型，违背 Global Constraints。正确做法是用 Prisma 的事务客户端类型 `Prisma.TransactionClient`（由 `@prisma/client` 的 `Prisma` 命名空间导出）。注意 `record` 第一个参数显式要求事务客户端（落实 ADR-0002 的原子写入），调用方在 `$transaction` 内传入。
+
 ```ts
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { Prisma } from "@prisma/client";
 
 export interface AuditInput {
   actorType: "user" | "system" | "tool";
@@ -1096,11 +1139,9 @@ export interface AuditInput {
 export class AuditService {
   constructor(private prisma: PrismaService) {}
 
-  /** 在调用方事务内执行，保证与状态变更同事务原子写入 */
-  async record(tx: PrismaService["prisma"] extends infer P ? P : never, input: AuditInput) {
-    // 接受事务客户端或普通客户端
-    const client = (tx ?? this.prisma) as any;
-    return client.auditEvent.create({
+  /** 在调用方 $transaction 内执行，传入事务客户端，保证与状态变更原子写入（落实 ADR-0002） */
+  record(tx: Prisma.TransactionClient, input: AuditInput) {
+    return tx.auditEvent.create({
       data: {
         actorType: input.actorType,
         actorId: input.actorId,
@@ -1114,7 +1155,7 @@ export class AuditService {
 }
 ```
 
-> 说明：`record` 接受一个 Prisma 事务客户端，使调用方能在 `$transaction` 内把 AuditEvent 与状态变更原子写入（落实 ADR-0002）。
+> 说明：`Prisma.TransactionClient` 是 Prisma 生成的事务客户端类型，包含所有 model 的 `create/update/delete`，但不包含 `$transaction`/`$connect` 等——正好约束调用方必须在事务内用。无需 `as any`。
 
 - [ ] **Step 7: 创建 `src/app.module.ts` 与 `src/main.ts`**
 
@@ -1370,6 +1411,8 @@ export const toolRunsQueueEvents = new QueueEvents("tool-runs", { connection });
 
 - [ ] **Step 2: 实现 `tool-run.service.ts`（幂等创建 + 入队）**
 
+> 【v1.1】**修正入队顺序**：v1 在 `$transaction` 内 `await toolRunsQueue.add(...)`，违背 ADR-0002"状态先落库再驱动执行"——worker 可能在事务提交前就消费，去查 `toolRun` 查不到而抛错。**修正：事务内只写状态+事件，`queue.add` 移到事务提交后**。`audit.record` 现在接收正确的 `Prisma.TransactionClient`（Task 6 已修）。
+
 ```ts
 import { Injectable, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
@@ -1383,7 +1426,8 @@ export class ToolRunService {
 
   /** 幂等：相同 (workItemId, idempotencyKey) 返回已有 ToolRun */
   async start(workItemId: string, prompt: string, idempotencyKey: string, providerId = "mock") {
-    return this.prisma.$transaction(async (tx) => {
+    // 事务内：只写状态 + 事件（事实源）
+    const toolRun = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.toolRun.findUnique({
         where: { workItemId_idempotencyKey: { workItemId, idempotencyKey } },
       });
@@ -1391,7 +1435,7 @@ export class ToolRunService {
 
       const workItem = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
 
-      // 若 WorkItem 非 ready，尝试转移 ready->running 或拒绝
+      // 若 WorkItem 非 running，尝试转移 ready->running 或拒绝
       if (workItem.status !== "running") {
         if (workItem.status === "ready" && canTransition(defaultWorkflowDefinition, "ready", "running")) {
           await tx.workItem.update({ where: { id: workItemId }, data: { status: "running" } });
@@ -1405,19 +1449,20 @@ export class ToolRunService {
         }
       }
 
-      const toolRun = await tx.toolRun.create({
+      const created = await tx.toolRun.create({
         data: { workItemId, providerId, idempotencyKey, prompt, status: "queued" },
       });
-      await tx.workItem.update({ where: { id: workItemId }, data: { currentToolRunId: toolRun.id } });
+      await tx.workItem.update({ where: { id: workItemId }, data: { currentToolRunId: created.id } });
       await this.audit.record(tx, {
         actorType: "system", actorId: "engine", action: "tool_run.created",
-        subjectType: "ToolRun", subjectId: toolRun.id, payload: { providerId },
+        subjectType: "ToolRun", subjectId: created.id, payload: { providerId },
       });
-
-      // 入队（事务提交后由 BullMQ 消费）
-      await toolRunsQueue.add("run", { toolRunId: toolRun.id });
-      return toolRun;
+      return created;
     });
+
+    // 【v1.1】事务提交后再入队，保证 worker 消费时行已可见（落实 ADR-0002）
+    await toolRunsQueue.add("run", { toolRunId: toolRun.id });
+    return toolRun;
   }
 }
 ```
@@ -1560,6 +1605,179 @@ git commit -m "feat(engine): idempotent tool-run service and bullmq worker with 
 
 ---
 
+## Task 8a: 【v1.1 新增】Handoff 审批 REST —— demo 的 whoa 核心
+
+> **为什么新增**：demo 的 whoa 点是"人以 Reviewer 身份在 UI 点批准，流程才继续流转，全程可审计"。初版计划建了 Handoff 表（Task 4）但完全不驱动（Self-Review 自己承认 out-of-scope）。没有这个 Task，demo 只能演"AI 自己跑完"，丢掉你要的"人机协同"。本 Task 是 Phase 1 的 demo 验收关键。
+
+**Files:**
+- Create: `apps/api/src/modules/handoffs/handoffs.service.ts`, `handoffs.controller.ts`, `dto.ts`
+- Modify: `app.module.ts`（注册）
+
+**Interfaces:**
+- Consumes: `PrismaService`, `AuditService`, `@conductor/core`(`canTransition`, `defaultWorkflowDefinition`)
+- Produces:
+  - `POST /work-items/:id/handoffs/pending` → 返回当前 pending Handoff（若有）
+  - `POST /handoffs/:id/approve` → WorkItem `review → done`（事务内：状态转移 + Handoff 更新 + AuditEvent）
+  - `POST /handoffs/:id/reject` → WorkItem `review → running`（打回，重新触发）
+
+- [ ] **Step 1: 创建 `modules/handoffs/dto.ts`**
+
+> Phase 1 不接真 auth，`decidedBy` 由请求体传（demo 时代表"我是 Reviewer"）。后续接 User/JWT 后改从 token 取。
+
+```ts
+export class DecideHandoffDto {
+  decidedBy!: string;   // reviewer 的标识（Phase 1 占位，demo 用）
+  reason?: string;
+}
+```
+
+- [ ] **Step 2: 实现 `handoffs.service.ts`（事务内原子：状态 + Handoff + Audit）**
+
+```ts
+import { Injectable, NotFoundException, ConflictException } from "@nestjs/common";
+import { PrismaService } from "../../prisma/prisma.service";
+import { AuditService } from "../../events/audit.service";
+import { canTransition, defaultWorkflowDefinition } from "@conductor/core";
+
+@Injectable()
+export class HandoffsService {
+  constructor(private prisma: PrismaService, private audit: AuditService) {}
+
+  /** 取某 WorkItem 当前 pending 的 Handoff（review 等待审批时存在） */
+  findPending(workItemId: string) {
+    return this.prisma.handoff.findFirst({
+      where: { workItemId, status: "pending" },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /** 批准：review → done */
+  async approve(handoffId: string, decidedBy: string, reason?: string) {
+    return this.decide(handoffId, "approved", "done", decidedBy, reason);
+  }
+
+  /** 打回：review → running（重新进入 AI 处理） */
+  async reject(handoffId: string, decidedBy: string, reason?: string) {
+    return this.decide(handoffId, "rejected", "running", decidedBy, reason);
+  }
+
+  /** 落实 ADR-0002：状态转移 + Handoff 决议 + AuditEvent 同事务原子写入 */
+  private async decide(
+    handoffId: string,
+    handoffStatus: "approved" | "rejected",
+    toStatus: "done" | "running",
+    decidedBy: string,
+    reason?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const handoff = await tx.handoff.findUniqueOrThrow({ where: { id: handoffId } });
+      if (handoff.status !== "pending") {
+        throw new ConflictException(`Handoff 已决议为 ${handoff.status}`);
+      }
+
+      // 校验转移合法性（纯函数，来自 packages/core）
+      if (!canTransition(defaultWorkflowDefinition, handoff.fromStatus, handoff.toStatus)) {
+        throw new ConflictException(`非法转移 ${handoff.fromStatus} -> ${handoff.toStatus}`);
+      }
+
+      await tx.handoff.update({
+        where: { id: handoffId },
+        data: { status: handoffStatus, decidedBy, decidedAt: new Date() },
+      });
+      await tx.workItem.update({
+        where: { id: handoff.workItemId },
+        data: { status: toStatus },
+      });
+      await this.audit.record(tx, {
+        actorType: "user", actorId: decidedBy,
+        action: `handoff.${handoffStatus}`,
+        subjectType: "WorkItem", subjectId: handoff.workItemId,
+        payload: { handoffId, to: toStatus, reason },
+      });
+      return tx.workItem.findUniqueOrThrow({ where: { id: handoff.workItemId } });
+    });
+  }
+}
+```
+
+- [ ] **Step 3: 实现 `handoffs.controller.ts`**
+
+```ts
+import { Controller, Post, Param, Body, NotFoundException } from "@nestjs/common";
+import { HandoffsService } from "./handoffs.service";
+import { DecideHandoffDto } from "./dto";
+
+@Controller()
+export class HandoffsController {
+  constructor(private handoffs: HandoffsService) {}
+
+  @Get("work-items/:id/handoffs/pending")
+  async pending(@Param("id") id: string) {
+    const h = await this.handoffs.findPending(id);
+    if (!h) throw new NotFoundException("无 pending Handoff");
+    return h;
+  }
+
+  @Post("handoffs/:id/approve")
+  approve(@Param("id") id: string, @Body() dto: DecideHandoffDto) {
+    return this.handoffs.approve(id, dto.decidedBy, dto.reason);
+  }
+
+  @Post("handoffs/:id/reject")
+  reject(@Param("id") id: string, @Body() dto: DecideHandoffDto) {
+    return this.handoffs.reject(id, dto.decidedBy, dto.reason);
+  }
+}
+```
+
+> 注意：需补 `Get` 的 import（`import { Controller, Post, Get, Param, Body, NotFoundException } from "@nestjs/common";`）。
+
+- [ ] **Step 4: 在 worker 的 `running → review` 转移处，创建 pending Handoff**
+
+> 【v1.1】这是闭环关键：ToolRun 成功后，worker 不只转移状态到 review，还要**创建一条 pending Handoff 记录**，否则审批接口找不到 handoff。修改 Task 8 Step 3 的 `transitionWorkItem`：当目标是 `review` 时附带创建 Handoff。
+
+在 Task 8 的 worker 文件追加（或改造 `transitionWorkItem`）：
+
+```ts
+/** running -> review 时附带创建 pending Handoff（demo 审批入口） */
+async function transitionToReview(
+  prisma: PrismaService,
+  audit: AuditService,
+  workItemId: string,
+) {
+  await prisma.$transaction(async (tx) => {
+    await tx.workItem.update({ where: { id: workItemId }, data: { status: "review" } });
+    await tx.handoff.create({
+      data: { workItemId, fromStatus: "running", toStatus: "review", status: "pending" },
+    });
+    await audit.record(tx, {
+      actorType: "system", actorId: "engine", action: "transition",
+      subjectType: "WorkItem", subjectId: workItemId, payload: { to: "review" },
+    });
+  });
+}
+```
+
+在 worker 成功分支把 `transitionWorkItem(..., "running", "review")` 替换为 `transitionToReview(prisma, audit, toolRun.workItemId)`。
+
+- [ ] **Step 5: 在 `AppModule` 注册 `HandoffsController` + `HandoffsService`**
+
+`controllers` 增加 `HandoffsController`，`providers` 增加 `HandoffsService`。
+
+- [ ] **Step 6: 手动验证（需 pg+redis）**
+
+Run: 走完 Task 9 的 run → 用 `GET /work-items/:id/handoffs/pending` 拿到 handoffId → `POST /handoffs/:id/approve`（body `{ "decidedBy": "reviewer-1" }`）→ `GET /work-items/:id` 应为 `done`。
+Expected: WorkItem 流转到 done；AuditEvent 有 `handoff.approved` 记录。
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/api
+git commit -m "feat(api): handoff approval REST endpoints (approve/reject) driving the demo whoa loop"
+```
+
+---
+
 ## Task 9: EventBus + REST controllers（work-items / tool-runs）
 
 **Files:**
@@ -1595,10 +1813,13 @@ export class EventBusService {
 
 - [ ] **Step 2: 创建 `modules/work-items/dto.ts`**
 
+> 【v1.1】`CreateWorkItemDto` 加 `type` 字段（默认 `task`，demo 传 `bug`）。
+
 ```ts
 export class CreateWorkItemDto {
   title!: string;
   description?: string;
+  type?: "bug" | "feature" | "task";   // 【v1.1】默认 task，demo 用 bug
 }
 export class StartRunDto {
   prompt!: string;
@@ -1616,11 +1837,16 @@ import { PrismaService } from "../../prisma/prisma.service";
 export class WorkItemsService {
   constructor(private prisma: PrismaService) {}
 
-  create(projectId: string, title: string, description = "") {
-    return this.prisma.workItem.create({ data: { projectId, title, description, status: "draft" } });
+  create(projectId: string, title: string, type: "bug" | "feature" | "task" = "task", description = "") {
+    return this.prisma.workItem.create({
+      data: { projectId, title, type, description, status: "draft" },
+    });
   }
-  list(projectId?: string) {
-    return this.prisma.workItem.findMany({ where: projectId ? { projectId } : undefined, orderBy: { createdAt: "desc" } });
+  list(projectId?: string, type?: "bug" | "feature" | "task") {
+    return this.prisma.workItem.findMany({
+      where: { ...(projectId ? { projectId } : {}), ...(type ? { type } : {}) },
+      orderBy: { createdAt: "desc" },
+    });
   }
   get(id: string) {
     return this.prisma.workItem.findUniqueOrThrow({ where: { id } });
@@ -1646,7 +1872,7 @@ export class WorkItemsController {
 
   @Post("projects/:pid/work-items")
   create(@Param("pid") pid: string, @Body() dto: CreateWorkItemDto) {
-    return this.items.create(pid, dto.title, dto.description);
+    return this.items.create(pid, dto.title, dto.type ?? "task", dto.description);
   }
 
   @Get("work-items")
@@ -1814,14 +2040,16 @@ export default defineConfig({
 
 - [ ] **Step 2: 实现 `test/smoke.e2e-spec.ts`**
 
+> 【v1.1】清理 v1 的占位垃圾代码（先 `runId: "PENDING"` 订阅再废弃），补 `afterAll` import；并把验证扩展为**含 Handoff 审批的完整 demo 闭环**（报 bug → AI 修 → 人审批 → done）。
+
 ```ts
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { NestFactory } from "@nestjs/core";
 import { io as ioc } from "socket.io-client";
 import { AppModule } from "../src/app.module";
 import { PrismaService } from "../src/prisma/prisma.service";
 
-describe("闭环 smoke", () => {
+describe("闭环 smoke（报 bug → AI 修 → 人审批 → done）", () => {
   let app: Awaited<ReturnType<typeof NestFactory.create>>;
   let prisma: PrismaService;
   let baseURL: string;
@@ -1831,55 +2059,82 @@ describe("闭环 smoke", () => {
     process.env.REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
     app = await NestFactory.create(AppModule);
     await app.listen(0); // 随机端口
-    const port = (app.getHttpServer().address() as any).port;
+    const port = (app.getHttpServer().address() as { port: number }).port;
     baseURL = `http://localhost:${port}`;
     prisma = app.get(PrismaService);
   });
+  afterAll(async () => { await app?.close(); });
 
-  it("WorkItem 跑通 Mock 闭环并落库", async () => {
+  it("bug 跑通 Mock 闭环 + 人工审批，全程落库", async () => {
     const project = await prisma.project.create({ data: { name: "p1" } });
 
+    // 1. 报一个 bug（type=bug）
     const wiRes = await fetch(`${baseURL}/projects/${project.id}/work-items`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "hello task" }),
+      body: JSON.stringify({ title: "登录白屏", type: "bug", description: "cookie 过期后 401" }),
     });
     const wi = await wiRes.json();
     expect(wi.status).toBe("draft");
+    expect(wi.type).toBe("bug"); // 【v1.1】
 
+    // 2. ready
     await fetch(`${baseURL}/work-items/${wi.id}/ready`, { method: "POST" });
 
-    // 连 WS 订阅
-    const sock = ioc(baseURL);
-    await new Promise<void>((r) => sock.on("connect", () => r()));
-    const received: unknown[] = [];
-    sock.emit("subscribe", { runId: "PENDING" }); // runId 在 run 后才知道；改为先 run 再订阅
-
+    // 3. 触发 AI(Mock) 修复
     const runRes = await fetch(`${baseURL}/work-items/${wi.id}/runs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "do something", idempotencyKey: "smoke-1" }),
+      body: JSON.stringify({ prompt: "修复登录白屏", idempotencyKey: "smoke-1" }),
     });
     const run = await runRes.json();
     expect(run.id).toBeTruthy();
 
+    // 4. WS 订阅该 run 的事件（v1 的占位 PENDING 订阅已删除）
+    const sock = ioc(baseURL);
+    await new Promise<void>((r) => sock.on("connect", () => r()));
+    const received: unknown[] = [];
     sock.emit("subscribe", { runId: run.id });
-    sock.on(`tool-event:${run.id}`, (e) => received.push(e));
+    sock.on(`tool-event:${run.id}`, (e: unknown) => received.push(e));
 
-    // 轮询等待完成
-    const final = await waitFor(async () => prisma.toolRun.findUniqueOrThrow({ where: { id: run.id } }), (r) => r.status === "succeeded", 5000);
-    expect(final.status).toBe("succeeded");
+    // 5. 等 ToolRun 成功 → WorkItem 应进入 review（含 pending Handoff）
+    const runFinal = await waitFor(
+      () => prisma.toolRun.findUniqueOrThrow({ where: { id: run.id } }),
+      (r) => r.status === "succeeded", 5000,
+    );
+    expect(runFinal.status).toBe("succeeded");
 
+    const wiReview = await waitFor(
+      () => prisma.workItem.findUniqueOrThrow({ where: { id: wi.id } }),
+      (w) => w.status === "review", 5000,
+    );
+    expect(wiReview.status).toBe("review");
+
+    // 事件落库校验
     const events = await prisma.toolEvent.findMany({ where: { runId: run.id }, orderBy: { seq: "asc" } });
     expect(events.length).toBeGreaterThan(1);
     expect(events[0]!.type).toBe("started");
     expect(events.at(-1)!.type).toBe("completed");
+    expect(received.length).toBeGreaterThan(0); // WS 收到事件
 
-    const wiFinal = await prisma.workItem.findUniqueOrThrow({ where: { id: wi.id } });
-    expect(wiFinal.status).toBe("review"); // running->review（需审批）
+    // 6. 人审批：找到 pending Handoff → approve → done（demo whoa 点）【v1.1】
+    const pendingRes = await fetch(`${baseURL}/work-items/${wi.id}/handoffs/pending`);
+    const handoff = await pendingRes.json();
+    expect(handoff.id).toBeTruthy();
+
+    const approveRes = await fetch(`${baseURL}/handoffs/${handoff.id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decidedBy: "reviewer-1", reason: "修复OK" }),
+    });
+    const approved = await approveRes.json();
+    expect(approved.status).toBe("done");
+
+    // 7. 审计：有 handoff.approved 记录
+    const audits = await prisma.auditEvent.findMany({
+      where: { subjectType: "WorkItem", subjectId: wi.id, action: "handoff.approved" },
+    });
+    expect(audits.length).toBe(1);
 
     sock.close();
   }, 30000);
-
-  afterAll?.(async () => { await app?.close(); });
 });
 
 async function waitFor<T>(fn: () => Promise<T>, done: (t: T) => boolean, timeoutMs: number) {
@@ -1893,18 +2148,78 @@ async function waitFor<T>(fn: () => Promise<T>, done: (t: T) => boolean, timeout
 }
 ```
 
-> 注意：补上 `afterAll` 的 import；删除占位的 `PENDING` 订阅行（先 run 再订阅的真实逻辑已在其后）。
-
 - [ ] **Step 3: 运行 e2e（需 docker pg + redis 在跑）**
 
 Run: `pnpm --filter @conductor/api test:e2e`
-Expected: PASS —— 闭环跑通，ToolEvent 落库、WorkItem 最终 `review`、WS 收到事件
+Expected: PASS —— bug 闭环跑通：ToolEvent 落库、WS 收到事件、Handoff 审批后 WorkItem 到 `done`、有审计记录
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add apps/api
-git commit -m "test(api): end-to-end smoke for mock tool-run closed loop"
+git commit -m "test(api): end-to-end bug→AI→human-approval closed loop"
+```
+
+---
+
+## Task 11a: 【v1.1 新增】Demo 脚本 —— Phase 1 验收物
+
+> **为什么新增**：开源冷启动，外部贡献者 clone 后必须能在 30 秒内看到 whoa。初版计划没有任何"让人跑起来演示"的入口。本 Task 产出最小 Web UI + 一键脚本，是 Phase 1 的**验收物**（对应顶部 Demo 验收标准）。
+
+**Files:**
+- Create: `apps/web/`（最小 Next.js + MUI 页面，**只够 demo，不追求完整**）
+- Create: `scripts/demo.sh`（一键：docker up → migrate → seed 一个 project → dev）
+- Modify: `README.md`（加 "30 秒体验" 段 + GIF 占位）
+
+**Interfaces:**
+- Produces: 一个能 demo 的最小 UI：①bug 列表 ②点"报 bug"创建 ③点"派给 AI"触发 ToolRun ④实时日志 ⑤review 时出现"批准/打回"按钮 ⑥审批后流转到 done ⑦审计回放
+
+> 这个 UI 范围克制是关键：只做上面 7 步，不碰用户系统/权限/多项目。前端是 demo 的载体，不是产品。
+
+- [ ] **Step 1: 最小 Next.js 骨架**（`apps/web`，App Router + MUI，复用 ADR-0001 选型）
+
+只列关键，不铺完整代码（实现时补）：
+- `app/page.tsx`：bug 列表 + 创建表单
+- `app/work-items/[id]/page.tsx`：详情页 = 实时日志（socket.io-client 订阅）+ 审批按钮（review 态可见）
+- 一个 `useWorkItems` / `api` 小封装调后端 REST
+
+- [ ] **Step 2: `scripts/demo.sh`**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cp -n .env.example .env || true
+docker compose up -d
+pnpm install
+pnpm db:migrate
+# seed 一个默认 project（若不存在），便于 demo 直接报 bug
+node -e "..." # 或用 prisma db seed
+pnpm dev
+```
+
+- [ ] **Step 3: README 加"30 秒体验"段**
+
+```markdown
+## 🚀 30 秒体验
+
+\`\`\`bash
+git clone ... && cd conductor && ./scripts/demo.sh
+\`\`\`
+
+打开 http://localhost:3000 → 报一个 bug → 看 AI 自动修 → 你点"批准" → bug 流转到 done。
+
+![demo](docs/assets/demo.gif) <!-- 录制后补 -->
+```
+
+- [ ] **Step 4: 人工验收（对齐顶部 Demo 验收标准）**
+
+按 README 的 30 秒步骤跑一遍，确认 demo 闭环成立。**这是 Phase 1 的最终验收门**——demo 跑不起来，前面 13 个 Task 不算完成。
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web scripts/demo.sh README.md
+git commit -m "feat(web): minimal demo UI + one-command demo script (Phase 1 acceptance)"
 ```
 
 ---
@@ -1918,24 +2233,55 @@ git commit -m "test(api): end-to-end smoke for mock tool-run closed loop"
 - ✅ PG 事实源 + 幂等 → Task 4 `@@unique([workItemId, idempotencyKey])`、Task 8 事务
 - ✅ Role/PolicyEngine 占位 → Task 3 policy 契约（Phase 1 不实现 engine，仅边界）
 - ✅ MockToolProvider 优先 → Task 7；CodexProvider 留 feature flag（Global Constraints 声明，本计划不实现具体逻辑，符合 Phase 1）
-- ✅ 实时回显 → Task 10
-- ⚠️ Repository/Artifact/Handoff：schema 已建（Task 4），但 Phase 1 闭环未驱动 Handoff 审批 UI——这是**有意裁剪**（设计文档明确 Phase 1 仅"最小 Handoff/Approval 模型"边界），REST 审批接口留待后续 plan。在计划中标注为 out-of-scope，不视为缺口。
+- ✅ 实时回显 → Task 10（socket.io，见下"实时栈"）
+- ✅ 【v1.1】**Handoff 实际驱动** → Task 8a（REST approve/reject）+ Task 8 Step 4 创建 pending Handoff。**初版的 out-of-scope 缺口已补上**，现在 demo 闭环含人工审批。
+- ✅ 【v1.1】**WorkItem.type** → Task 3 + Task 4，支持 bug 入口。
+- ✅ 【v1.1】**Demo 验收物** → Task 11a，Phase 1 有可演示产物。
 
-**2. 占位符扫描**：Step 中无 "TBD/TODO"；Task 6 Step 6 的 `record` 签名、Task 8 Step 4 的 `this.registry` 注入、Task 11 的 `afterAll` import 均已显式标注"需补/注意"。无隐藏占位。
+**2. 占位符扫描**：【v1.1】v1 残留的隐藏占位已全部修复：
+- ~~Task 6 `record` 签名 `PrismaService["prisma"] extends infer P ? P : never` + `as any`~~ → 改为正确的 `Prisma.TransactionClient`
+- ~~Task 8 `queue.add` 在事务内~~ → 移到事务提交后
+- ~~Task 11 `runId: "PENDING"` 占位订阅 + `afterAll` 缺 import~~ → 已清理
+- 残留需执行时补的：Task 8a Step 3 的 `Get` import、Task 8 Step 4 的 `this.registry` 注入——均在 Step 内显式标注。
 
 **3. 类型一致性**：
 - `WorkItemStatus` / `ToolRunStatus` 在 core 与 prisma enum 一致（draft/ready/running/review/done/failed 与 queued/running/succeeded/failed/canceled）✅
+- 【v1.1】`WorkItemType`（bug/feature/task）core 与 prisma enum 一致 ✅
 - `ToolProvider.execute` 返回 `AsyncIterable<ToolEvent>`，worker 与 mock 一致 ✅
 - `ToolRegistryService` 实现 core 的 `ToolRegistry` ✅
 - `startToolRun` 幂等唯一键 `workItemId_idempotencyKey` 与 schema `@@unique` 一致 ✅
+- 【v1.1】`AuditService.record(tx: Prisma.TransactionClient)` 与 Task 8 `transitionWorkItem`/Task 8a `decide` 调用一致 ✅
+
+**4. 【v1.1】实时栈一致性**：ADR-0001 写 `ws`，计划用 `socket.io`——已在 Global Constraints 标注统一为 socket.io，ADR 待同步（见 Execution Handoff）。
 
 ---
 
 ## Execution Handoff
 
-计划完成并保存至 `docs/plans/2026-07-09-phase-01-backend-core.md`。两种执行方式：
+计划（v1.1）完成并保存至 `docs/plans/2026-07-09-phase-01-backend-core.md`。
+
+### 执行方式
 
 1. **Subagent-Driven（推荐）** —— 每个 Task 派发独立 subagent，任务间 review，迭代快
 2. **Inline Execution** —— 在当前会话用 executing-plans 批量执行 + 检查点
 
-**选择哪种？**
+### 【v1.1】开发工程师授权流程（硬约束）
+
+代码开发实行**按 Task 批次审批**，见 Global Constraints 的批次表（PR-1 ~ PR-6）。规则：
+1. AI agent 每批次开工前，先列出本批次**文件清单 + 关键设计点**，等开发工程师批准。
+2. 批次完成打包成一个 PR，开发工程师审 diff 通过后才继续下一批。
+3. 文档改动（本 v1.1 修订即属此类）不需此授权。
+
+### 【v1.1】待同步的文档
+
+执行代码前，以下文档需同步修订（属文档工作，可直接做）：
+
+| 文档 | 改动 |
+|------|------|
+| `docs/adr/0001-tech-stack.md` | 实时栈 `ws` → `socket.io`（与计划一致） |
+| `docs/design/phase-01-architecture.md` | §3 数据流保留；§4 关键关系补充"WorkItem.type" |
+| `ROADMAP.md` | Phase 1 补充"demo 验收标准"与"开发工程师批次审批"说明 |
+
+### 建议新增 ADR（可选，执行代码前补）
+
+- **ADR-0003**：`WorkItem.type` 字段（bug/feature/task）——记录"bug 不作独立实体"的决策与 grill 依据（建模洁癖 vs 冷启动速度的取舍）。

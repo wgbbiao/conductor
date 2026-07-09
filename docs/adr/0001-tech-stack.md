@@ -22,7 +22,7 @@ Conductor 是 AI 原生的研发流程编排平台。技术栈需支持：可插
 | 后端 | NestJS + TS |
 | 数据 | Prisma + PostgreSQL + Redis |
 | 编排/任务 | BullMQ |
-| 实时 | WebSocket（ws） |
+| 实时 | WebSocket via **socket.io**（`@nestjs/platform-socket.io`） |
 
 UI 框架选用 **MUI（Material UI）**——全球使用量最大的开源 React UI 框架（明确不使用 Tailwind）。
 
@@ -44,3 +44,9 @@ UI 框架选用 **MUI（Material UI）**——全球使用量最大的开源 Rea
 
 - Go 后端 + React：性能/部署更优，但契约维护成本高，未采纳。
 - Python 后端 + React：LLM 生态强但与本项目核心诉求不匹配，未采纳。
+
+## 修订记录
+
+| 日期 | 变更 | 来源 |
+|------|------|------|
+| 2026-07-09 | 实时层由裸 `ws` 改为 **socket.io**。理由：实施计划实际依赖 `@nestjs/platform-socket.io`（网关、`@SubscribeMessage`、`socket.io-client`），与裸 `ws` 不是同一套 API。统一为 socket.io 以免贡献者困惑。socket.io 底层仍是 WebSocket，并自带重连/房间/降级，适合实时事件投递。 | [Phase 1 计划 v1.1](../plans/2026-07-09-phase-01-backend-core.md) 评审（office-hours + grill-me） |

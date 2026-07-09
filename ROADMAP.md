@@ -20,10 +20,17 @@
 
 **目标**：搭起核心领域模型与扩展点，让"可插拔"成为一等公民。
 
-- [ ] 领域模型：项目 / 迭代 / 工作项 / 角色 / 工作流
-- [ ] 三个扩展点抽象：`ToolProvider`（AI 工具）/ `SkillPack`（技能包）/ `Role`（角色）
+**Demo 验收标准**：外部贡献者 clone 后一键跑起——报一个 bug → AI(Mock) 自动修 → 人(Reviewer) 在 UI 点批准 → 流转到 done，全程可审计回放。详见 [实施计划 v1.1](./docs/plans/2026-07-09-phase-01-backend-core.md)。
+
+- [ ] 领域模型：项目 / 工作项（含 type=bug/feature/task）/ 工作流
+- [ ] 三个扩展点抽象：`ToolProvider`（AI 工具）/ `SkillPack`（技能包）/ `PolicyEngine`（治理）
 - [ ] 最小可运行内核 + 插件注册机制
+- [ ] 事件账本（AuditEvent/ToolEvent）+ 幂等 ToolRun
+- [ ] Handoff 审批闭环（demo 核心）
+- [ ] 最小 Demo UI + 一键脚本
 - [ ] 技术栈选型与 ADR 定稿
+
+> **执行方式**：代码开发实行"按 Task 批次审批"——每批次打成一个 PR，开发工程师审过才继续。详见实施计划的批次表。
 
 ---
 
