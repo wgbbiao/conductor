@@ -21,6 +21,10 @@ import { WorkItemsController } from "./modules/work-items/work-items.controller"
 import { WorkItemsService } from "./modules/work-items/work-items.service";
 import { ToolRunsController } from "./modules/tool-runs/tool-runs.controller";
 import { ToolRunsService } from "./modules/tool-runs/tool-runs.service";
+import { ProjectsController } from "./modules/projects/projects.controller";
+import { ProjectsService } from "./modules/projects/projects.service";
+import { AuditsController } from "./modules/audits/audits.controller";
+import { AuditsService } from "./modules/audits/audits.service";
 import { config } from "./config";
 
 @Module({
@@ -30,6 +34,8 @@ import { config } from "./config";
     HandoffsController,
     WorkItemsController,
     ToolRunsController,
+    ProjectsController,
+    AuditsController,
   ],
   providers: [
     PrismaService,
@@ -45,6 +51,8 @@ import { config } from "./config";
     HandoffsService,
     WorkItemsService,
     ToolRunsService,
+    ProjectsService,
+    AuditsService,
     // 全局守卫：所有 REST 默认需 JWT 鉴权，登录接口用 @Public 豁免
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],

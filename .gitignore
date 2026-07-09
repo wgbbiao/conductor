@@ -101,3 +101,7 @@ secrets/
 # turbo 本地缓存
 turbo/
 .turbo/
+
+# next.js 构建产物
+.next/
+out/
