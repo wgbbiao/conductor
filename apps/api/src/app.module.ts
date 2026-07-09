@@ -17,6 +17,8 @@ import { ToolRunService } from "./engine/tool-run.service";
 import { startToolRunWorker } from "./engine/tool-run.worker";
 import { HandoffsController } from "./modules/handoffs/handoffs.controller";
 import { HandoffsService } from "./modules/handoffs/handoffs.service";
+import { ArtifactsController } from "./modules/artifacts/artifacts.controller";
+import { ArtifactsService } from "./modules/artifacts/artifacts.service";
 import { WorkItemsController } from "./modules/work-items/work-items.controller";
 import { WorkItemsService } from "./modules/work-items/work-items.service";
 import { ToolRunsController } from "./modules/tool-runs/tool-runs.controller";
@@ -25,12 +27,16 @@ import { ProjectsController } from "./modules/projects/projects.controller";
 import { ProjectsService } from "./modules/projects/projects.service";
 import { AuditsController } from "./modules/audits/audits.controller";
 import { AuditsService } from "./modules/audits/audits.service";
+import { WorkspaceModule } from "./modules/workspace/workspace.module";
+import { CodexProvider } from "./tools/codex-tool-provider";
 import { config } from "./config";
 
 @Module({
+  imports: [WorkspaceModule],
   controllers: [
     AuthController,
     UsersController,
+    ArtifactsController,
     HandoffsController,
     WorkItemsController,
     ToolRunsController,
@@ -46,8 +52,10 @@ import { config } from "./config";
     EventBusService,
     EventsGateway,
     MockToolProvider,
+    CodexProvider,
     ToolRegistryService,
     ToolRunService,
+    ArtifactsService,
     HandoffsService,
     WorkItemsService,
     ToolRunsService,
@@ -64,12 +72,14 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly registry: ToolRegistryService,
     mock: MockToolProvider,
+    codex: CodexProvider,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly bus: EventBusService,
     private readonly toolRuns: ToolRunService,
   ) {
     registry.register(mock);
+    registry.register(codex);
   }
 
   async onModuleInit(): Promise<void> {
