@@ -60,11 +60,13 @@ export const api = {
     apiFetch<ToolRun>(`/work-items/${id}/runs`, { method: "POST", json: { prompt, idempotencyKey } }),
   listRuns: (workItemId: string) => apiFetch<ToolRun[]>(`/work-items/${workItemId}/runs`),
   getEvents: (runId: string) => apiFetch<ToolEvent[]>(`/tool-runs/${runId}/events`),
+  getDiff: (runId: string) => apiFetch<{ diff: string }>(`/tool-runs/${runId}/diff`).then((r) => r.diff).catch(() => ""),
 
   // handoffs
   getPendingHandoff: (workItemId: string) => apiFetch<Handoff>(`/work-items/${workItemId}/handoffs/pending`),
-  approve: (id: string, reason?: string) => apiFetch(`/handoffs/${id}/approve`, { method: "POST", json: { reason } }),
-  reject: (id: string, reason?: string) => apiFetch(`/handoffs/${id}/reject`, { method: "POST", json: { reason } }),
+  approve: (id: string, reason?: string) =>
+    apiFetch<WorkItem & { prUrl?: string }>(`/handoffs/${id}/approve`, { method: "POST", json: { reason } }),
+  reject: (id: string, reason?: string) => apiFetch<WorkItem>(`/handoffs/${id}/reject`, { method: "POST", json: { reason } }),
 
   // audit
   listAudits: (subjectId: string) =>

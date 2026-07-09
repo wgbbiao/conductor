@@ -23,6 +23,7 @@ import {
   Typography,
 } from "@mui/material";
 import { TopAppBar } from "@/components/AppBar";
+import { DiffViewer } from "@/components/DiffViewer";
 import { WorkItemStatusChip, WorkItemTypeChip } from "@/components/StatusChip";
 import { API_URL, api } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -149,7 +150,13 @@ export default function WorkItemDetailPage() {
         )}
 
         {tab === 2 && (
-          <ApprovalPanel handoff={handoff} wiStatus={wi.status} onDecided={reload} setToast={setToast} />
+          <ApprovalPanel
+            handoff={handoff}
+            latestRunId={latestRun?.id ?? wi.currentToolRunId}
+            wiStatus={wi.status}
+            onDecided={reload}
+            setToast={setToast}
+          />
         )}
 
         {tab === 3 && <AuditPanel workItemId={id} />}
@@ -270,27 +277,56 @@ function LogLine({ e }: { e: ToolEvent }) {
 /** 审批 Tab */
 function ApprovalPanel({
   handoff,
+  latestRunId,
   wiStatus,
   onDecided,
   setToast,
 }: {
   handoff: Handoff | null;
+  latestRunId: string | null;
   wiStatus: WorkItem["status"];
   onDecided: () => Promise<void>;
   setToast: (s: string) => void;
 }) {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [diff, setDiff] = useState("");
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [prUrl, setPrUrl] = useState("");
 
-  if (!handoff) {
-    return <Alert severity="info">暂无待审批项{wiStatus === "done" ? "（已完成）" : ""}</Alert>;
-  }
+  useEffect(() => {
+    if (wiStatus !== "review" || !latestRunId) {
+      setDiff("");
+      setDiffLoading(false);
+      return;
+    }
+
+    let active = true;
+    setDiffLoading(true);
+    api
+      .getDiff(latestRunId)
+      .then((nextDiff) => {
+        if (active) setDiff(nextDiff);
+      })
+      .finally(() => {
+        if (active) setDiffLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [latestRunId, wiStatus]);
 
   const decide = async (action: "approve" | "reject") => {
+    if (!handoff) return;
     setLoading(true);
     try {
-      if (action === "approve") await api.approve(handoff.id, reason);
-      else await api.reject(handoff.id, reason);
+      if (action === "approve") {
+        const result = await api.approve(handoff.id, reason);
+        setPrUrl(result.prUrl ?? "");
+      } else {
+        await api.reject(handoff.id, reason);
+      }
       setToast(action === "approve" ? "已批准 → done" : "已打回 → 重新处理");
       await onDecided();
     } finally {
@@ -298,28 +334,69 @@ function ApprovalPanel({
     }
   };
 
+  const prCard = prUrl ? (
+    <Box
+      sx={{
+        border: 1,
+        borderColor: "divider",
+        borderRadius: 1,
+        p: 2,
+        bgcolor: "background.paper",
+      }}
+    >
+      <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+        <Typography variant="subtitle2">PR</Typography>
+        <Button size="small" variant="outlined" href={prUrl} target="_blank" rel="noreferrer">
+          打开
+        </Button>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" fontFamily="monospace" sx={{ mt: 1, wordBreak: "break-all" }}>
+        {prUrl}
+      </Typography>
+    </Box>
+  ) : null;
+
+  if (!handoff) {
+    return (
+      <Stack spacing={2}>
+        {prCard}
+        <Alert severity="info">暂无待审批项{wiStatus === "done" ? "（已完成）" : ""}</Alert>
+      </Stack>
+    );
+  }
+
   return (
-    <Card>
-      <CardContent>
-        <Stack spacing={2}>
-          <Alert severity="info" icon={<span>🟣</span>}>
-            需要你审批 —— AI 已完成，等待 Reviewer 确认
-          </Alert>
-          <Typography variant="body2" color="text.secondary">
-            当前状态：<strong>{handoff.fromStatus}</strong> → 审批通过后流转到 <strong>{handoff.toStatus}</strong>
-          </Typography>
-          <TextField label="审批意见（可选）" value={reason} onChange={(e) => setReason(e.target.value)} multiline rows={2} fullWidth />
-          <Stack direction="row" spacing={2} justifyContent="flex-end">
-            <Button variant="outlined" color="error" onClick={() => decide("reject")} disabled={loading}>
-              ✗ 打回
-            </Button>
-            <Button variant="contained" color="primary" onClick={() => decide("approve")} disabled={loading}>
-              {loading ? <CircularProgress size={20} /> : "✓ 批准"}
-            </Button>
+    <Stack spacing={2}>
+      {prCard}
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Alert severity="info">等待审批</Alert>
+            <Typography variant="body2" color="text.secondary">
+              当前状态：<strong>{handoff.fromStatus}</strong> → <strong>{handoff.toStatus}</strong>
+            </Typography>
+            <Box>
+              {diffLoading ? (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : (
+                <DiffViewer diff={diff} />
+              )}
+            </Box>
+            <TextField label="审批意见" value={reason} onChange={(e) => setReason(e.target.value)} multiline rows={2} fullWidth />
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              <Button variant="outlined" color="error" onClick={() => decide("reject")} disabled={loading}>
+                打回
+              </Button>
+              <Button variant="contained" color="primary" onClick={() => decide("approve")} disabled={loading}>
+                {loading ? <CircularProgress size={20} /> : "批准"}
+              </Button>
+            </Stack>
           </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </Stack>
   );
 }
 
