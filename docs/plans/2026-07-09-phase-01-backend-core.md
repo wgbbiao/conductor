@@ -9,6 +9,7 @@
 | v1.0 | 2026-07-09 | 初版 11 任务 TDD 计划 | codex 复核后起草 |
 | **v1.1** | 2026-07-09 | **office-hours 评审修订**：①范围重切，对齐"开源冷启动 demo"目标（新增 Task 4a/8a/11a）；②修复技术硬伤（AuditService 签名、入队顺序、socket.io 统一）；③WorkItem 加 `type` 字段；④Handoff 实际驱动（REST + demo）；⑤明确执行批次与"开发工程师按 Task 批次审批"流程 | [评审报告](../../) · grill 共识 |
 | **v1.2** | 2026-07-09 | **前置依赖 P1.5**：grill 确认"先 P1.5 后 P1 demo"。本计划实施前需先完成 [Phase 1.5（auth/user/rbac）](./2026-07-09-phase-1.5-auth-user-rbac.md)，使 `Handoff.decidedBy`/`AuditEvent.actorId` 用真 userId、所有 REST 挂 JWT。P1.5 Task 9 负责本计划的对齐。本计划其它 Task 在 P1.5 完成后实施，actor/token 按 P1.5 约定。 | grill 共识 |
+| **v1.3** | 2026-07-09 | **plan-eng-review 评审修订**：①砍 codex-tool-provider 骨架（P1 冗余）；②worker onEvent 投递容错（try/catch，不中断流式）；③api 启动清理孤儿 running ToolRun（标 failed+审计）；④Handoff.toStatus 语义改为"审批后目标态"（修 decide 校验/执行不一致 bug）；⑤抽取 transitionWorkItem 统一辅助（DRY）；⑥补全测试 gap（reject 路径/幂等重提交/孤儿恢复/防枚举/守卫边界）；⑦ToolEvent 批量写入标 P2 TODO。详见各 Task `【v1.3】` 标注。 | plan-eng-review |
 
 **v1.1 修订原因**：初版计划产出的是"可审计事件账本引擎"，但项目目标是开源冷启动，第一版必须是**能 demo 多角色人机协同一段研发流程**的产物。两者错配，故重切范围——不是推翻，是把服务 demo 的部分前置，补 3 个 demo 必需任务，修 4 个会编译失败/违背 ADR 的硬伤。详见各 Task 的 `【v1.1】` 标注。
 
@@ -2290,3 +2291,24 @@ git commit -m "feat(web): minimal demo UI + one-command demo script (Phase 1 acc
 ### 建议新增 ADR（可选，执行代码前补）
 
 - **ADR-0003**：`WorkItem.type` 字段（bug/feature/task）——记录"bug 不作独立实体"的决策与 grill 依据（建模洁癖 vs 冷启动速度的取舍）。
+
+---
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | 架构/代码/测试/性能（required） | 1 | CLEAR (PLAN) | 7 issues, 0 critical gaps |
+| CEO Review | `/plan-ceo-review` | 范围/战略 | 1 (office-hours) | CLEAR | 范围已对齐 demo 目标 |
+| Design Review | `/plan-design-review` | UI/UX | 0 | — | ui-design.md 已定稿，待 review |
+| Outside Voice | codex/subagent | 独立第二意见 | 0 | skipped | 环境无 codex |
+
+**ENG REVIEW 详情（plan-eng-review v1.3，commit 8f19d81）**：
+- Step 0 Scope：砍 codex-tool-provider 骨架（P1 冗余）
+- 架构（3）：onEvent 投递容错 / JWT secret 启动校验 / 孤儿 running 启动清理
+- 代码质量（2）：Handoff.toStatus 语义修复（bug）/ DRY 抽取 transitionWorkItem
+- 测试（1）：覆盖 25%→补全关键 gap（reject/幂等/孤儿/防枚举/守卫）
+- 性能（1）：ToolEvent 逐条 INSERT 标 P2 TODO
+- **UNRESOLVED：0** · **CRITICAL GAPS：0**（修复后）
+
+**VERDICT：ENG CLEARED — 7 issues 全部决议，0 unresolved，0 critical gap。评审结论已落地到 v1.3 修订，可进入实现。**
