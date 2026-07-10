@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { canTransition, defaultWorkflowDefinition, type WorkItemStatus } from "@conductor/core";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../../events/audit.service";
@@ -12,6 +12,14 @@ type PendingPr = {
   branch: string;
   title: string;
 };
+
+function prCreationFailureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("gh auth login") || message.includes("GH_TOKEN")) {
+    return "GitHub CLI 未登录，无法创建 PR；请执行 gh auth login";
+  }
+  return "创建 PR 失败，请检查 GitHub CLI 登录状态及仓库权限";
+}
 
 @Injectable()
 export class HandoffsService {
@@ -150,7 +158,7 @@ export class HandoffsService {
           payload: { message: error instanceof Error ? error.message : String(error) },
         });
       });
-      throw error;
+      throw new ServiceUnavailableException(prCreationFailureMessage(error));
     }
   }
 }
