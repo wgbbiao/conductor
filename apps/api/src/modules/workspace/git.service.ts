@@ -40,10 +40,16 @@ export class GitService {
     });
   }
 
-  diff(projectId: string, base: string, head: string): string {
-    return this.runner.run("git", ["diff", `${base}..${head}`], {
+  diff(projectId: string, base: string): string {
+    return this.runner.run("git", ["diff", base], {
       cwd: this.workspace.repoPath(projectId),
     });
+  }
+
+  commit(projectId: string, message: string): void {
+    const cwd = this.workspace.repoPath(projectId);
+    this.runner.run("git", ["add", "-A"], { cwd });
+    this.runner.run("git", ["commit", "-m", message], { cwd });
   }
 
   push(projectId: string, branch: string): void {

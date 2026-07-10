@@ -108,6 +108,10 @@ export class HandoffsService {
       return result.workItem;
     }
 
+    this.git.commit(
+      result.pendingPr.projectId,
+      `chore: apply conductor work item ${result.pendingPr.workItemId}`,
+    );
     this.git.push(result.pendingPr.projectId, result.pendingPr.branch);
     const prUrl = this.pr.create(
       result.pendingPr.projectId,

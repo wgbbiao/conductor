@@ -12,7 +12,7 @@ import type { ToolRegistryService } from "../tools/tool-registry.service";
 import { TOOL_RUNS_QUEUE, redisConnectionOpts } from "./queues";
 
 const logger = new Logger("ToolRunWorker");
-const RUN_TIMEOUT_MS = 60_000;
+const RUN_TIMEOUT_MS = 5 * 60_000;
 
 interface WorkerDeps {
   prisma: PrismaService;
@@ -89,13 +89,16 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
           }
         }
 
-        if (completedExitCode !== null && completedExitCode !== 0) {
+        if (ac.signal.aborted || completedExitCode === null) {
+          throw new Error(ac.signal.aborted ? "provider timed out" : "provider did not report completion");
+        }
+
+        if (completedExitCode !== 0) {
           throw new Error(`provider ${toolRun.providerId} exited with code ${completedExitCode}`);
         }
 
         if (toolRun.baseCommit && toolRun.branch) {
-          const head = git.baseCommit(project.id, "HEAD");
-          const diff = git.diff(project.id, toolRun.baseCommit, head);
+          const diff = git.diff(project.id, toolRun.baseCommit);
           await artifacts.saveDiff(toolRunId, diff);
         }
 

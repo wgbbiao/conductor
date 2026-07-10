@@ -25,18 +25,18 @@ describe("GitService", () => {
     ]);
   });
 
-  it("diff：执行 git diff base..head 并返回 diff 文本", () => {
+  it("diff：包含基线后的工作区改动", () => {
     const runner = new FakeShellRunner({
-      [gitCallKey("diff", "abc..def")]: "DIFF",
+      [gitCallKey("diff", "abc")]: "DIFF",
     });
     const workspace = new WorkspaceService(new FakeShellRunner());
     const service = new GitService(runner, workspace);
 
-    expect(service.diff("p1", "abc", "def")).toBe("DIFF");
+    expect(service.diff("p1", "abc")).toBe("DIFF");
     expect(runner.calls).toEqual([
       {
         command: "git",
-        args: ["diff", "abc..def"],
+        args: ["diff", "abc"],
         cwd: workspace.repoPath("p1"),
       },
     ]);
@@ -53,6 +53,27 @@ describe("GitService", () => {
       {
         command: "git",
         args: ["push", "origin", "conductor/wi_1"],
+        cwd: workspace.repoPath("p1"),
+      },
+    ]);
+  });
+
+  it("commit：暂存并提交工作区改动", () => {
+    const runner = new FakeShellRunner();
+    const workspace = new WorkspaceService(new FakeShellRunner());
+    const service = new GitService(runner, workspace);
+
+    service.commit("p1", "chore: apply conductor work item wi_1");
+
+    expect(runner.calls).toEqual([
+      {
+        command: "git",
+        args: ["add", "-A"],
+        cwd: workspace.repoPath("p1"),
+      },
+      {
+        command: "git",
+        args: ["commit", "-m", "chore: apply conductor work item wi_1"],
         cwd: workspace.repoPath("p1"),
       },
     ]);
