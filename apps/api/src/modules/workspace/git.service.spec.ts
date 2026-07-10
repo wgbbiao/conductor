@@ -78,6 +78,16 @@ describe("GitService", () => {
       },
     ]);
   });
+
+  it("hasChanges：读取工作区状态", () => {
+    const runner = new FakeShellRunner({
+      [gitCallKey("status", "--porcelain")]: " M index.html",
+    });
+    const workspace = new WorkspaceService(new FakeShellRunner());
+    const service = new GitService(runner, workspace);
+
+    expect(service.hasChanges("p1")).toBe(true);
+  });
 });
 
 describe("diffStat", () => {

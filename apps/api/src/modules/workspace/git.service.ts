@@ -52,6 +52,12 @@ export class GitService {
     this.runner.run("git", ["commit", "-m", message], { cwd });
   }
 
+  hasChanges(projectId: string): boolean {
+    return this.runner.run("git", ["status", "--porcelain"], {
+      cwd: this.workspace.repoPath(projectId),
+    }).length > 0;
+  }
+
   push(projectId: string, branch: string): void {
     this.runner.run("git", ["push", "origin", branch], {
       cwd: this.workspace.repoPath(projectId),

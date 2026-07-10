@@ -107,28 +107,50 @@ export class HandoffsService {
     if (!result.pendingPr) {
       return result.workItem;
     }
+    const pendingPr = result.pendingPr;
 
-    this.git.commit(
-      result.pendingPr.projectId,
-      `chore: apply conductor work item ${result.pendingPr.workItemId}`,
-    );
-    this.git.push(result.pendingPr.projectId, result.pendingPr.branch);
-    const prUrl = this.pr.create(
-      result.pendingPr.projectId,
-      result.pendingPr.branch,
-      result.pendingPr.title,
-      `Conductor WorkItem ${result.pendingPr.workItemId}`,
-    );
-    await this.prisma.auditEvent.create({
-      data: {
-        actorType: "system",
-        actorId: "engine",
-        action: "pr.created",
-        subjectType: "WorkItem",
-        subjectId: result.pendingPr.workItemId,
-        payload: { prUrl },
-      },
-    });
-    return { ...result.workItem, prUrl };
+    try {
+      if (this.git.hasChanges(pendingPr.projectId)) {
+        this.git.commit(
+          pendingPr.projectId,
+          `chore: apply conductor work item ${pendingPr.workItemId}`,
+        );
+      }
+      this.git.push(pendingPr.projectId, pendingPr.branch);
+      const prUrl = this.pr.create(
+        pendingPr.projectId,
+        pendingPr.branch,
+        pendingPr.title,
+        `Conductor WorkItem ${pendingPr.workItemId}`,
+      );
+      await this.prisma.auditEvent.create({
+        data: {
+          actorType: "system",
+          actorId: "engine",
+          action: "pr.created",
+          subjectType: "WorkItem",
+          subjectId: pendingPr.workItemId,
+          payload: { prUrl },
+        },
+      });
+      return { ...result.workItem, prUrl };
+    } catch (error) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.handoff.update({
+          where: { id: handoffId },
+          data: { status: "pending", decidedBy: null, decidedAt: null },
+        });
+        await tx.workItem.update({ where: { id: result.workItem.id }, data: { status: "review" } });
+        await this.audit.record(tx, {
+          actorType: "system",
+          actorId: "engine",
+          action: "pr.create_failed",
+          subjectType: "WorkItem",
+          subjectId: pendingPr.workItemId,
+          payload: { message: error instanceof Error ? error.message : String(error) },
+        });
+      });
+      throw error;
+    }
   }
 }
