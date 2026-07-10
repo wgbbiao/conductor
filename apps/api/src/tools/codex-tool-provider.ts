@@ -75,7 +75,7 @@ export class CodexProvider implements ToolProvider {
     yield nextEvent({ type: "started" });
 
     // Controller already confirmed current CLI syntax is `codex exec [PROMPT]`.
-    const child = spawn("codex", ["exec", input.prompt], {
+    const child = spawn("codex", ["exec", "--sandbox", "workspace-write", "--ask-for-approval", "never", input.prompt], {
       cwd: input.workspacePath,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],

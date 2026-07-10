@@ -79,7 +79,7 @@ describe("CodexProvider", () => {
     child.emit("close", 0);
 
     const events = await pending;
-    expect(spawnMock).toHaveBeenCalledWith("codex", ["exec", base.prompt], {
+    expect(spawnMock).toHaveBeenCalledWith("codex", ["exec", "--sandbox", "workspace-write", "--ask-for-approval", "never", base.prompt], {
       cwd: base.workspacePath,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],

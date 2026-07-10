@@ -53,6 +53,7 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
 
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), RUN_TIMEOUT_MS);
+      let completedExitCode: number | null = null;
 
       try {
         for await (const event of provider.execute(
@@ -80,6 +81,16 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
           } catch (e) {
             logger.error(`bus emit 失败 runId=${toolRunId}`, e as Error);
           }
+          if (event.type === "completed") {
+            completedExitCode = event.exitCode;
+          }
+          if (event.type === "failed") {
+            throw new Error(event.error.message);
+          }
+        }
+
+        if (completedExitCode !== null && completedExitCode !== 0) {
+          throw new Error(`provider ${toolRun.providerId} exited with code ${completedExitCode}`);
         }
 
         if (toolRun.baseCommit && toolRun.branch) {
@@ -90,12 +101,19 @@ export function startToolRunWorker(deps: WorkerDeps): Worker {
 
         await prisma.toolRun.update({
           where: { id: toolRunId },
-          data: { status: "succeeded", exitCode: 0, finishedAt: new Date() },
+          data: { status: "succeeded", exitCode: completedExitCode ?? 0, finishedAt: new Date() },
         });
         await transitionToReview(prisma, audit, toolRun.workItemId);
       } catch (e) {
         await prisma.toolRun
-          .update({ where: { id: toolRunId }, data: { status: "failed", finishedAt: new Date() } })
+          .update({
+            where: { id: toolRunId },
+            data: {
+              status: "failed",
+              exitCode: completedExitCode ?? undefined,
+              finishedAt: new Date(),
+            },
+          })
           .catch((err: unknown) => logger.error(`标记 failed 失败 runId=${toolRunId}`, err));
         await transitionWorkItem(prisma, audit, toolRun.workItemId, "running", "failed").catch((err: unknown) =>
           logger.error("流转 failed 失败", err),
